@@ -45,7 +45,7 @@ const App: React.FC = () => {
             <span className="font-display font-bold text-xl tracking-tight text-white">Crypto<span className="text-crypto-accent">Truth</span></span>
           </div>
           <div className="text-xs text-gray-500 font-mono">
-            POWERED BY GEMINI 2.5
+            POWERED BY tokimi.space
           </div>
         </div>
       </header>
