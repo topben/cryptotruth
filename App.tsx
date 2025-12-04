@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { KOLAnalysis, LoadingState } from './types';
 import { analyzeKOLHandle } from './services/geminiService';
 import SearchInput from './components/SearchInput';
@@ -36,7 +37,8 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-crypto-dark text-crypto-text font-sans selection:bg-crypto-accent selection:text-crypto-dark pb-20">
-      
+      <Analytics />
+
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur-md bg-crypto-dark/80 border-b border-gray-800">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
