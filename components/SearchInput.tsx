@@ -1,13 +1,32 @@
 import React, { useState } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, TrendingUp, AlertTriangle, Shield } from 'lucide-react';
 
 interface SearchInputProps {
   onSearch: (handle: string) => void;
   isLoading: boolean;
 }
 
+// Categorized interesting handles for quick search
+const SUGGESTED_HANDLES = {
+  controversial: [
+    { handle: 'zhusu', label: 'Zhu Su', note: '3AC Co-founder' },
+    { handle: 'KyleLDavies', label: 'Kyle Davies', note: '3AC Co-founder' },
+    { handle: 'SBF_FTX', label: 'SBF', note: 'FTX Founder' },
+  ],
+  investigators: [
+    { handle: 'zachxbt', label: 'ZachXBT', note: 'On-chain Sleuth' },
+    { handle: 'coffeebreak_YT', label: 'Coffeezilla', note: 'Scam Investigator' },
+  ],
+  influencers: [
+    { handle: 'cobie', label: 'Cobie', note: 'Crypto Analyst' },
+    { handle: 'pentosh1', label: 'Pentoshi', note: 'Trader' },
+    { handle: 'gainzy222', label: 'Gainzy', note: 'Degen Trader' },
+  ]
+};
+
 const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
   const [input, setInput] = useState('');
+  const [activeCategory, setActiveCategory] = useState<'controversial' | 'investigators' | 'influencers'>('controversial');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,16 +70,61 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           </button>
         </div>
       </form>
-      <div className="text-center mt-4 text-sm text-gray-500">
-        <span className="mr-4">Top Searches:</span>
-        {['@cobie', '@zhusu', '@zachxbt'].map(handle => (
-            <button 
-                key={handle} 
-                onClick={() => { setInput(handle.replace('@','')); onSearch(handle.replace('@','')); }}
-                className="text-crypto-muted hover:text-crypto-accent mx-2 underline decoration-dotted"
-            >
-                {handle}
-            </button>
+
+      {/* Category Tabs */}
+      <div className="flex justify-center gap-2 mt-6 mb-4">
+        <button
+          onClick={() => setActiveCategory('controversial')}
+          className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeCategory === 'controversial'
+              ? 'bg-red-900/30 text-red-400 border border-red-800'
+              : 'bg-gray-800 text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          <AlertTriangle className="w-4 h-4" />
+          Controversial
+        </button>
+        <button
+          onClick={() => setActiveCategory('investigators')}
+          className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeCategory === 'investigators'
+              ? 'bg-blue-900/30 text-blue-400 border border-blue-800'
+              : 'bg-gray-800 text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          <Shield className="w-4 h-4" />
+          Investigators
+        </button>
+        <button
+          onClick={() => setActiveCategory('influencers')}
+          className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeCategory === 'influencers'
+              ? 'bg-green-900/30 text-green-400 border border-green-800'
+              : 'bg-gray-800 text-gray-400 hover:text-gray-300'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          Influencers
+        </button>
+      </div>
+
+      {/* Suggested Handles */}
+      <div className="flex flex-wrap justify-center gap-2 mt-4">
+        {SUGGESTED_HANDLES[activeCategory].map(({ handle, label, note }) => (
+          <button
+            key={handle}
+            onClick={() => {
+              setInput(handle);
+              onSearch(handle);
+            }}
+            className="group relative bg-gray-900/50 hover:bg-gray-800 border border-gray-700 hover:border-crypto-accent rounded-lg px-4 py-2 transition-all"
+            disabled={isLoading}
+          >
+            <div className="flex flex-col items-start">
+              <span className="text-crypto-accent font-medium">@{handle}</span>
+              <span className="text-xs text-gray-500 group-hover:text-gray-400">{note}</span>
+            </div>
+          </button>
         ))}
       </div>
     </div>

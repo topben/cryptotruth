@@ -17,6 +17,7 @@ export interface HistoryEvent {
   token?: string; // e.g., "BTC", "SOL"
   sentiment: Sentiment;
   details: string;
+  sourceUrl?: string; // URL to evidence source for this specific event
 }
 
 export interface KOLAnalysis {
@@ -27,6 +28,8 @@ export interface KOLAnalysis {
   totalWins: number;
   totalLosses: number;
   followersCount?: string;
+  walletAddresses?: string[]; // Public wallet addresses found
+  verdict?: string; // One-sentence summary verdict (e.g., "High Risk Scammer")
   history: HistoryEvent[];
   sources: SourceLink[];
   lastAnalyzed: string;
