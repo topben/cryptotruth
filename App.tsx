@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { KOLAnalysis, LoadingState } from './types';
 import { analyzeKOLHandle } from './services/geminiService';
+import { getCachedAnalysis, setCachedAnalysis, getCacheAge } from './services/cacheService';
 import SearchInput from './components/SearchInput';
 import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
-import { ShieldAlert, TrendingUp, TrendingDown, ExternalLink, Activity, ArrowRight, Search, Share2 } from 'lucide-react';
+import { ShieldAlert, TrendingUp, TrendingDown, ExternalLink, Activity, ArrowRight, Search, Share2, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const LOADING_MESSAGES = [
@@ -35,10 +36,23 @@ const App: React.FC = () => {
     }
   }, [loadingState]);
 
-  const handleSearch = async (handle: string) => {
-    setLoadingState('SEARCHING');
+  const handleSearch = async (handle: string, forceRefresh: boolean = false) => {
     setError(null);
     setAnalysis(null);
+
+    // Check cache first (unless force refresh is requested)
+    if (!forceRefresh) {
+      const cached = getCachedAnalysis(handle);
+      if (cached) {
+        console.log(`Using cached data for ${handle}`);
+        setAnalysis(cached);
+        setLoadingState('COMPLETED');
+        return;
+      }
+    }
+
+    // No cache or force refresh - fetch from API
+    setLoadingState('SEARCHING');
     setLoadingMessage(LOADING_MESSAGES[0]);
 
     // Artificial delay to show "searching" phase if API is too fast,
@@ -49,12 +63,22 @@ const App: React.FC = () => {
 
     try {
       const result = await analyzeKOLHandle(handle);
+
+      // Cache the result
+      setCachedAnalysis(handle, result);
+
       setAnalysis(result);
       setLoadingState('COMPLETED');
     } catch (err) {
       console.error(err);
       setError("Failed to analyze this handle. Ensure the API key is set and the handle is valid.");
       setLoadingState('ERROR');
+    }
+  };
+
+  const handleRefresh = () => {
+    if (analysis) {
+      handleSearch(analysis.handle, true);
     }
   };
 
@@ -164,14 +188,42 @@ const App: React.FC = () => {
                 <div className="md:col-span-4 flex flex-col gap-4">
                     <TrustMeter score={analysis.trustScore} />
 
-                    {/* Share on X Button */}
-                    <button
-                      onClick={handleShareOnX}
-                      className="bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-500 hover:to-crypto-accent text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group"
-                    >
-                      <Share2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                      Share on X
-                    </button>
+                    {/* Action Buttons */}
+                    <div className="flex flex-col gap-2">
+                      {/* Share on X Button */}
+                      <button
+                        onClick={handleShareOnX}
+                        className="bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-500 hover:to-crypto-accent text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group"
+                      >
+                        <Share2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                        Share on X
+                      </button>
+
+                      {/* Refresh Button */}
+                      <button
+                        onClick={handleRefresh}
+                        className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-2 px-4 rounded-xl border border-gray-700 transition-all duration-300 flex items-center justify-center gap-2 group"
+                        title="Force refresh analysis"
+                      >
+                        <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
+                        Refresh Analysis
+                      </button>
+                    </div>
+
+                    {/* Cache Info */}
+                    {(() => {
+                      const cacheAge = getCacheAge(analysis.handle);
+                      if (cacheAge !== null && cacheAge < 24 * 60) {
+                        return (
+                          <div className="bg-blue-900/20 p-3 rounded-xl border border-blue-800 text-center">
+                            <p className="text-xs text-blue-400">
+                              📦 Cached {cacheAge < 60 ? `${cacheAge}m` : `${Math.round(cacheAge / 60)}h`} ago
+                            </p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
 
                     {/* Verdict Display */}
                     {analysis.verdict && (
