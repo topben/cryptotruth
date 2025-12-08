@@ -1,24 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { KOLAnalysis, LoadingState } from './types';
 import { analyzeKOLHandle } from './services/geminiService';
 import SearchInput from './components/SearchInput';
 import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
-import { ShieldAlert, TrendingUp, TrendingDown, ExternalLink, Activity, ArrowRight, Search } from 'lucide-react';
+import { ShieldAlert, TrendingUp, TrendingDown, ExternalLink, Activity, ArrowRight, Search, Share2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+
+const LOADING_MESSAGES = [
+  'Checking ZachXBT\'s database...',
+  'Scanning deleted tweets...',
+  'Analyzing on-chain activity...',
+  'Cross-referencing Coffeezilla reports...',
+  'Searching Reddit r/CryptoCurrency...',
+  'Tracking wallet movements...',
+  'Reviewing community sentiment...',
+  'Analyzing historical calls...',
+];
 
 const App: React.FC = () => {
   const [loadingState, setLoadingState] = useState<LoadingState>('IDLE');
   const [analysis, setAnalysis] = useState<KOLAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState<string>(LOADING_MESSAGES[0]);
+
+  // Cycle through loading messages
+  useEffect(() => {
+    if (loadingState === 'SEARCHING' || loadingState === 'ANALYZING') {
+      const interval = setInterval(() => {
+        setLoadingMessage(LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [loadingState]);
 
   const handleSearch = async (handle: string) => {
     setLoadingState('SEARCHING');
     setError(null);
     setAnalysis(null);
+    setLoadingMessage(LOADING_MESSAGES[0]);
 
-    // Artificial delay to show "searching" phase if API is too fast, 
+    // Artificial delay to show "searching" phase if API is too fast,
     // mostly to improve UX feeling of "scouring the web"
     setTimeout(() => {
         if (loadingState === 'SEARCHING') setLoadingState('ANALYZING');
@@ -33,6 +56,16 @@ const App: React.FC = () => {
       setError("Failed to analyze this handle. Ensure the API key is set and the handle is valid.");
       setLoadingState('ERROR');
     }
+  };
+
+  const handleShareOnX = () => {
+    if (!analysis) return;
+
+    const verdict = analysis.verdict || `Trust Score: ${analysis.trustScore}/100`;
+    const tweetText = `⚠️ ${verdict} for @${analysis.handle}! CryptoTruth found ${analysis.totalWins} Good Reports and ${analysis.totalLosses} Negative Findings/Scams. Check their full analysis 👇 #CryptoTruth #DYOR`;
+
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
+    window.open(twitterUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -71,12 +104,12 @@ const App: React.FC = () => {
 
         {/* Loading State Overlay */}
         {(loadingState === 'SEARCHING' || loadingState === 'ANALYZING') && (
-            <div className="flex flex-col items-center justify-center mt-20 animate-pulse">
+            <div className="flex flex-col items-center justify-center mt-20">
                 <div className="w-16 h-16 border-4 border-crypto-accent border-t-transparent rounded-full animate-spin mb-4"></div>
-                <p className="text-xl font-display text-crypto-accent">
-                    {loadingState === 'SEARCHING' ? 'Scouring the Blockchain...' : 'Analyzing Reputation...'}
+                <p className="text-xl font-display text-crypto-accent animate-pulse">
+                    {loadingMessage}
                 </p>
-                <p className="text-sm text-gray-500 mt-2">Checking archives, deleted tweets, and community reports.</p>
+                <p className="text-sm text-gray-500 mt-2">This may take a moment...</p>
             </div>
         )}
 
@@ -128,8 +161,25 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Trust Meter */}
-                <div className="md:col-span-4 flex flex-col">
+                <div className="md:col-span-4 flex flex-col gap-4">
                     <TrustMeter score={analysis.trustScore} />
+
+                    {/* Share on X Button */}
+                    <button
+                      onClick={handleShareOnX}
+                      className="bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-500 hover:to-crypto-accent text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group"
+                    >
+                      <Share2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                      Share on X
+                    </button>
+
+                    {/* Verdict Display */}
+                    {analysis.verdict && (
+                      <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
+                        <h4 className="text-xs text-gray-500 uppercase mb-2">Verdict</h4>
+                        <p className="text-white font-medium leading-relaxed">{analysis.verdict}</p>
+                      </div>
+                    )}
                 </div>
             </div>
 

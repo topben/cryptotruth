@@ -1,6 +1,6 @@
 import React from 'react';
 import { HistoryEvent } from '../types';
-import { CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Info, ExternalLink } from 'lucide-react';
 
 interface HistoryTimelineProps {
   events: HistoryEvent[];
@@ -45,7 +45,20 @@ const HistoryTimeline: React.FC<HistoryTimelineProps> = ({ events }) => {
             </div>
 
             <div className="flex justify-between items-start mb-1">
-              <h4 className="font-bold text-white text-lg">{event.description}</h4>
+              <div className="flex items-center gap-2 flex-1">
+                <h4 className="font-bold text-white text-lg">{event.description}</h4>
+                {event.sourceUrl && (
+                  <a
+                    href={event.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-crypto-accent hover:text-blue-400 transition-colors"
+                    title="View evidence source"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+              </div>
               <span className="text-xs font-mono text-gray-500 bg-gray-900 px-2 py-1 rounded">{event.date}</span>
             </div>
             

@@ -17,6 +17,7 @@ export interface HistoryEvent {
   token?: string; // e.g., "BTC", "SOL"
   sentiment: Sentiment;
   details: string;
+  sourceUrl?: string; // URL to evidence source for this specific event
 }
 
 export interface KOLAnalysis {

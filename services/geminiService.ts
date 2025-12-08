@@ -58,7 +58,7 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
           "followersCount": "100K",
           "walletAddresses": ["0x..."],
           "verdict": "One-sentence summary verdict",
-          "history": [{"id": "1", "date": "2024-01-01", "description": "Event", "type": "PREDICTION_WIN", "token": "BTC", "sentiment": "POSITIVE", "details": "Details"}]
+          "history": [{"id": "1", "date": "2024-01-01", "description": "Event", "type": "PREDICTION_WIN", "token": "BTC", "sentiment": "POSITIVE", "details": "Details", "sourceUrl": "https://..."}]
         }
       `;
     }
@@ -96,7 +96,8 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
             "type": "PREDICTION_WIN", // Use "PREDICTION_WIN" for Good Reports, "PREDICTION_LOSS" or "CONTROVERSY" for Negative Findings
             "token": "SOL", // Optional token symbol involved
             "sentiment": "POSITIVE", // "POSITIVE", "NEGATIVE", "NEUTRAL"
-            "details": "A longer explanation of what happened. Include if it was paid promo or shilling if detected."
+            "details": "A longer explanation of what happened. Include if it was paid promo or shilling if detected.",
+            "sourceUrl": "https://example.com/evidence" // REQUIRED: Direct URL to the evidence source for this specific event (tweet, article, Reddit post, etc.)
           }
         ]
       }
