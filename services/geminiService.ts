@@ -37,37 +37,78 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const prompt = `
-    I need a detailed reputation analysis of the Cryptocurrency KOL (Key Opinion Leader) / Twitter User: "${handle}".
-    
-    Using Google Search, find information about:
-    1. Positive contributions, accurate analysis, successful calls (Good Reports).
-    2. Failed predictions, rug pulls promoted, scams, or controversies (Negative Findings).
-    3. Their general reputation in the community.
-    
-    RETURN ONLY A VALID JSON OBJECT (inside a json markdown block) with this specific structure:
-    {
-      "displayName": "Their Name or Handle",
-      "bioSummary": "A short 1-2 sentence summary of who they are and their niche (e.g., shitcoins, BTC maxis, NFTs).",
-      "trustScore": 75, // Integer 0-100 based on the ratio of good reports to negative findings/scams.
-      "totalWins": 5, // Estimated count of Good Reports (wins, positive contributions) found
-      "totalLosses": 2, // Estimated count of Negative Findings (losses, scams, controversies) found
-      "followersCount": "100K", // Approximate if found
-      "history": [
-        {
-          "id": "unique_id_1",
-          "date": "YYYY-MM-DD or 'Recent'",
-          "description": "Short title of event (e.g. 'Predicted SOL drop')",
-          "type": "PREDICTION_WIN", // Use "PREDICTION_WIN" for Good Reports, "PREDICTION_LOSS" or "CONTROVERSY" for Negative Findings
-          "token": "SOL", // Optional token symbol involved
-          "sentiment": "POSITIVE", // "POSITIVE", "NEGATIVE", "NEUTRAL"
-          "details": "A longer explanation of what happened."
-        }
-      ]
-    }
-  `;
+  const buildPrompt = (isRetry: boolean = false) => {
+    if (isRetry) {
+      // Simplified prompt for retry attempts
+      return `
+        Analyze the Cryptocurrency KOL: "${handle}".
 
-  try {
+        Search for information about their reputation, predictions, and controversies.
+        Also search for keywords: "ZachXBT ${handle}", "Coffeezilla ${handle}", "Reddit r/CryptoCurrency ${handle}".
+        Identify if they engage in paid promotions or shilling behavior.
+        Extract any public wallet addresses if mentioned.
+
+        RETURN ONLY VALID JSON (no extra text, no markdown block):
+        {
+          "displayName": "Name",
+          "bioSummary": "Summary",
+          "trustScore": 75,
+          "totalWins": 5,
+          "totalLosses": 2,
+          "followersCount": "100K",
+          "walletAddresses": ["0x..."],
+          "verdict": "One-sentence summary verdict",
+          "history": [{"id": "1", "date": "2024-01-01", "description": "Event", "type": "PREDICTION_WIN", "token": "BTC", "sentiment": "POSITIVE", "details": "Details"}]
+        }
+      `;
+    }
+
+    // Full detailed prompt for first attempt
+    return `
+      I need a detailed reputation analysis of the Cryptocurrency KOL (Key Opinion Leader) / Twitter User: "${handle}".
+
+      Using Google Search, find information about:
+      1. Positive contributions, accurate analysis, successful calls (Good Reports).
+      2. Failed predictions, rug pulls promoted, scams, or controversies (Negative Findings).
+      3. Their general reputation in the community.
+
+      IMPORTANT SEARCH INSTRUCTIONS:
+      - Explicitly search for: "ZachXBT ${handle}", "Coffeezilla ${handle}", "Reddit r/CryptoCurrency ${handle}"
+      - Look for mentions on investigative crypto accounts and community discussions
+      - Identify if they engage in "Paid Promo", "Shilling", or repetitive promotion of the same projects
+      - Try to extract any public wallet addresses (ETH, SOL, BTC, etc.) associated with this person
+
+      RETURN ONLY A VALID JSON OBJECT (inside a json markdown block) with this specific structure:
+      {
+        "displayName": "Their Name or Handle",
+        "bioSummary": "A short 1-2 sentence summary of who they are and their niche (e.g., shitcoins, BTC maxis, NFTs).",
+        "trustScore": 75, // Integer 0-100 based on the ratio of good reports to negative findings/scams. Lower if paid promo/shilling detected.
+        "totalWins": 5, // Estimated count of Good Reports (wins, positive contributions) found
+        "totalLosses": 2, // Estimated count of Negative Findings (losses, scams, controversies) found
+        "followersCount": "100K", // Approximate if found
+        "walletAddresses": ["0x1234...", "So1abc..."], // Array of public wallet addresses found (leave empty array if none)
+        "verdict": "One-sentence summary verdict (e.g., 'High Risk Scammer' or 'Trusted Analyst' or 'Potential Paid Promoter')",
+        "history": [
+          {
+            "id": "unique_id_1",
+            "date": "YYYY-MM-DD or 'Recent'",
+            "description": "Short title of event (e.g. 'Predicted SOL drop' or 'Promoted rug pull')",
+            "type": "PREDICTION_WIN", // Use "PREDICTION_WIN" for Good Reports, "PREDICTION_LOSS" or "CONTROVERSY" for Negative Findings
+            "token": "SOL", // Optional token symbol involved
+            "sentiment": "POSITIVE", // "POSITIVE", "NEGATIVE", "NEUTRAL"
+            "details": "A longer explanation of what happened. Include if it was paid promo or shilling if detected."
+          }
+        ]
+      }
+
+      CRITICAL: Ensure the JSON is properly formatted with no trailing commas, valid escaping, and all required fields present.
+    `;
+  };
+
+  const attemptAnalysis = async (attemptNumber: number): Promise<KOLAnalysis> => {
+    const isRetry = attemptNumber > 1;
+    const prompt = buildPrompt(isRetry);
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
@@ -79,7 +120,7 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
 
     const text = response.text;
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    
+
     // Extract sources from grounding chunks
     const sources = groundingChunks
       .map((chunk: any) => {
@@ -93,7 +134,7 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
     const data = extractJson(text);
 
     if (!data) {
-      throw new Error("Failed to parse analysis results.");
+      throw new Error("Failed to parse JSON from response");
     }
 
     // Merge sources into data structure
@@ -103,9 +144,32 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
       sources: sources,
       lastAnalyzed: new Date().toISOString()
     };
+  };
 
-  } catch (error) {
-    console.error("Error analyzing KOL:", error);
-    throw error;
+  // Retry logic: up to 3 attempts
+  const maxAttempts = 3;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`Attempt ${attempt}/${maxAttempts} to analyze KOL: ${handle}`);
+      const result = await attemptAnalysis(attempt);
+      console.log(`Successfully analyzed KOL on attempt ${attempt}`);
+      return result;
+    } catch (error) {
+      console.error(`Attempt ${attempt} failed:`, error);
+      lastError = error as Error;
+
+      // If this wasn't the last attempt, wait before retrying
+      if (attempt < maxAttempts) {
+        const delay = Math.pow(2, attempt - 1) * 1000; // Exponential backoff: 1s, 2s
+        console.log(`Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+
+  // All attempts failed
+  console.error(`All ${maxAttempts} attempts failed for KOL: ${handle}`);
+  throw new Error(`Failed to analyze KOL after ${maxAttempts} attempts. Last error: ${lastError?.message || 'Unknown error'}`);
 };
