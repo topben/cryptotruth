@@ -31,10 +31,10 @@ const extractJson = (text) => {
 
 export const analyzeKOLHandle = async (handle) => {
   // API key is now securely stored on server-side only
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.CRYPTOTRUTH_GEMINI_API_KEY;
 
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not configured on the server.");
+    throw new Error("CRYPTOTRUTH_GEMINI_API_KEY is not configured on the server.");
   }
 
   const ai = new GoogleGenAI({ apiKey });

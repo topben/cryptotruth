@@ -74,7 +74,7 @@ We've implemented a secure **backend API layer** architecture:
 
 1. **Environment Variables**:
    ```bash
-   GEMINI_API_KEY=your_actual_key
+   CRYPTOTRUTH_GEMINI_API_KEY=your_actual_key
    PORT=3001
    FRONTEND_URL=https://yourdomain.com
    ```

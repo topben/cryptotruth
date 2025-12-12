@@ -44,7 +44,7 @@ cp .env.example .env
 ```
 Edit `.env` and add your Gemini API key:
 ```
-GEMINI_API_KEY=your_actual_gemini_api_key_here
+CRYPTOTRUTH_GEMINI_API_KEY=your_actual_gemini_api_key_here
 PORT=3001
 FRONTEND_URL=http://localhost:3000
 ```
