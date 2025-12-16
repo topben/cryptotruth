@@ -48,7 +48,10 @@
   },
   "error": {
     "title": "Analysis Failed",
-    "defaultMessage": "Failed to analyze this handle. Ensure the API key is set and the handle is valid."
+    "defaultMessage": "Failed to analyze this handle. Ensure the API key is set and the handle is valid.",
+    "tooManyRequests": "Too many requests. The API rate limit has been exceeded. Please wait a moment and try again.",
+    "notFound": "The requested resource was not found. Please check if the handle exists and try again.",
+    "badRequest": "Invalid request. Please check your input and try again."
   },
   "results": {
     "goodReports": "Good Reports",
