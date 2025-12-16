@@ -1,0 +1,83 @@
+{
+  "common": {
+    "poweredBy": "POWERED BY tokimi.space",
+    "followers": "Followers",
+    "unknown": "Unknown"
+  },
+  "header": {
+    "brand": "CryptoTruth"
+  },
+  "hero": {
+    "title": "Verify Your",
+    "titleHighlight": "Heroes",
+    "description": "AI-powered background checks for Crypto Twitter. We scrape history to find the wins, the rug pulls, and the truth."
+  },
+  "search": {
+    "placeholder": "Search KOL handle (e.g. pentosh1, ansem)",
+    "audit": "Audit",
+    "scanning": "Scanning",
+    "newSearch": "New Search"
+  },
+  "categories": {
+    "controversial": "Controversial",
+    "investigators": "Investigators",
+    "influencers": "Influencers"
+  },
+  "suggestedHandles": {
+    "zhusu": "3AC Co-founder",
+    "kyleLDavies": "3AC Co-founder",
+    "sbfFtx": "FTX Founder",
+    "zachxbt": "On-chain Sleuth",
+    "coffeebreak": "Scam Investigator",
+    "cobie": "Crypto Analyst",
+    "pentosh1": "Trader",
+    "gainzy222": "Degen Trader"
+  },
+  "loading": {
+    "messages": [
+      "Checking ZachXBT's database...",
+      "Scanning deleted tweets...",
+      "Analyzing on-chain activity...",
+      "Cross-referencing Coffeezilla reports...",
+      "Searching Reddit r/CryptoCurrency...",
+      "Tracking wallet movements...",
+      "Reviewing community sentiment...",
+      "Analyzing historical calls..."
+    ],
+    "wait": "This may take a moment..."
+  },
+  "error": {
+    "title": "Analysis Failed",
+    "defaultMessage": "Failed to analyze this handle. Ensure the API key is set and the handle is valid."
+  },
+  "results": {
+    "goodReports": "Good Reports",
+    "negativeFindings": "Negative Findings / Scams",
+    "reportRatio": "Report Ratio",
+    "evidenceSources": "Evidence Sources",
+    "noSources": "No direct web sources linked in summary.",
+    "verdict": "Verdict",
+    "cachedAgo": "Cached {{time}} ago",
+    "shareOnX": "Share on X",
+    "refreshAnalysis": "Refresh Analysis"
+  },
+  "trustScore": {
+    "label": "Trust Score",
+    "legend": "LEGEND",
+    "trusted": "TRUSTED",
+    "mixed": "MIXED",
+    "risky": "RISKY",
+    "scammer": "SCAMMER"
+  },
+  "timeline": {
+    "title": "Track Record",
+    "noEvents": "No specific history events found.",
+    "viewSource": "View evidence source"
+  },
+  "share": {
+    "tweetTemplate": "{{verdict}} for @{{handle}}! CryptoTruth found {{wins}} Good Reports and {{losses}} Negative Findings/Scams. Check their full analysis #CryptoTruth #DYOR"
+  },
+  "languageSelector": {
+    "label": "Language"
+  }
+}
