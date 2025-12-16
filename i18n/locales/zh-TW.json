@@ -48,7 +48,10 @@
   },
   "error": {
     "title": "分析失敗",
-    "defaultMessage": "無法分析此帳號。請確認 API 金鑰已設定且帳號有效。"
+    "defaultMessage": "無法分析此帳號。請確認 API 金鑰已設定且帳號有效。",
+    "tooManyRequests": "請求次數過多。已超過 API 速率限制，請稍候再試。",
+    "notFound": "找不到請求的資源。請確認帳號是否存在後再試一次。",
+    "badRequest": "無效的請求。請檢查您的輸入後再試一次。"
   },
   "results": {
     "goodReports": "正面報告",

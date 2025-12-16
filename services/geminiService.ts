@@ -1,6 +1,39 @@
 import { GoogleGenAI } from "@google/genai";
 import { KOLAnalysis, Sentiment, HistoryEvent } from "../types";
 
+// Custom error class to carry HTTP status codes
+export class APIError extends Error {
+  statusCode: number;
+
+  constructor(message: string, statusCode: number) {
+    super(message);
+    this.name = 'APIError';
+    this.statusCode = statusCode;
+  }
+}
+
+// Helper to extract HTTP status code from error
+const extractStatusCode = (error: any): number | null => {
+  // Check for status or statusCode property
+  if (error?.status) return error.status;
+  if (error?.statusCode) return error.statusCode;
+  if (error?.response?.status) return error.response.status;
+
+  // Check error message for common patterns
+  const message = error?.message || String(error);
+  if (message.includes('429') || message.toLowerCase().includes('too many requests') || message.toLowerCase().includes('rate limit')) {
+    return 429;
+  }
+  if (message.includes('404') || message.toLowerCase().includes('not found')) {
+    return 404;
+  }
+  if (message.includes('400') || message.toLowerCase().includes('bad request')) {
+    return 400;
+  }
+
+  return null;
+};
+
 // Helper to extract JSON from a markdown code block if present
 const extractJson = (text: string): any => {
   try {
@@ -161,6 +194,21 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
       console.error(`Attempt ${attempt} failed:`, error);
       lastError = error as Error;
 
+      // Check for specific HTTP error codes that shouldn't be retried
+      const statusCode = extractStatusCode(error);
+      if (statusCode === 429) {
+        // Rate limit - throw immediately without retrying
+        throw new APIError('Too many requests. Rate limit exceeded.', 429);
+      }
+      if (statusCode === 404) {
+        // Not found - throw immediately without retrying
+        throw new APIError('Resource not found.', 404);
+      }
+      if (statusCode === 400) {
+        // Bad request - throw immediately without retrying
+        throw new APIError('Bad request.', 400);
+      }
+
       // If this wasn't the last attempt, wait before retrying
       if (attempt < maxAttempts) {
         const delay = Math.pow(2, attempt - 1) * 1000; // Exponential backoff: 1s, 2s
@@ -170,7 +218,12 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
     }
   }
 
-  // All attempts failed
+  // All attempts failed - check if last error has a status code
+  const lastStatusCode = extractStatusCode(lastError);
+  if (lastStatusCode) {
+    throw new APIError(`Failed to analyze KOL after ${maxAttempts} attempts.`, lastStatusCode);
+  }
+
   console.error(`All ${maxAttempts} attempts failed for KOL: ${handle}`);
   throw new Error(`Failed to analyze KOL after ${maxAttempts} attempts. Last error: ${lastError?.message || 'Unknown error'}`);
 };

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Analytics } from '@vercel/analytics/react';
 import { KOLAnalysis, LoadingState } from './types';
-import { analyzeKOLHandle } from './services/geminiService';
+import { analyzeKOLHandle, APIError } from './services/geminiService';
 import { getCachedAnalysis, setCachedAnalysis, getCacheAge } from './services/cacheService';
 import SearchInput from './components/SearchInput';
 import TrustMeter from './components/TrustMeter';
@@ -66,7 +66,26 @@ const App: React.FC = () => {
       setLoadingState('COMPLETED');
     } catch (err) {
       console.error(err);
-      setError(t('error.defaultMessage'));
+
+      // Handle specific API error codes
+      if (err instanceof APIError) {
+        switch (err.statusCode) {
+          case 429:
+            setError(t('error.tooManyRequests'));
+            break;
+          case 404:
+            setError(t('error.notFound'));
+            break;
+          case 400:
+            setError(t('error.badRequest'));
+            break;
+          default:
+            setError(t('error.defaultMessage'));
+        }
+      } else {
+        setError(t('error.defaultMessage'));
+      }
+
       setLoadingState('ERROR');
     }
   };
