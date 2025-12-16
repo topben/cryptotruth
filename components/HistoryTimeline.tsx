@@ -1,17 +1,32 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
-import { HistoryEvent } from '../types';
+import { HistoryEvent, Language } from '../types';
 import { CheckCircle2, XCircle, AlertTriangle, Info, ExternalLink } from 'lucide-react';
 
 interface HistoryTimelineProps {
   events: HistoryEvent[];
+  title?: string;
+  language?: Language;
 }
 
-const HistoryTimeline: React.FC<HistoryTimelineProps> = ({ events }) => {
-  const { t } = useTranslation();
+const TRANSLATIONS = {
+  en: {
+    title: 'Track Record',
+    noEvents: 'No track record events found.',
+    viewSource: 'View source',
+  },
+  'zh-TW': {
+    title: '歷史紀錄',
+    noEvents: '未找到歷史紀錄事件。',
+    viewSource: '查看來源',
+  },
+};
+
+const HistoryTimeline: React.FC<HistoryTimelineProps> = ({ events, title, language = 'en' }) => {
+  const t = TRANSLATIONS[language];
+  const displayTitle = title ?? t.title;
 
   if (!events || events.length === 0) {
-    return <div className="text-gray-500 italic text-center py-8">{t('timeline.noEvents')}</div>;
+    return <div className="text-gray-500 italic text-center py-8">{t.noEvents}</div>;
   }
 
   const getIcon = (type: string) => {
@@ -38,7 +53,7 @@ const HistoryTimeline: React.FC<HistoryTimelineProps> = ({ events }) => {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-xl font-display font-semibold text-white mb-4">{t('timeline.title')}</h3>
+      <h3 className="text-xl font-display font-semibold text-white mb-4">{displayTitle}</h3>
       <div className="relative border-l-2 border-gray-800 ml-3 space-y-6 pl-6 py-2">
         {events.map((event, idx) => (
           <div key={idx} className={`relative bg-gray-900/50 p-4 rounded-r-lg border-l-4 ${getBorderColor(event.type)} hover:bg-gray-800 transition-colors`}>
@@ -56,7 +71,7 @@ const HistoryTimeline: React.FC<HistoryTimelineProps> = ({ events }) => {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-crypto-accent hover:text-blue-400 transition-colors"
-                    title={t('timeline.viewSource')}
+                    title={t.viewSource}
                   >
                     <ExternalLink className="w-4 h-4" />
                   </a>

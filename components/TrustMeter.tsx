@@ -1,12 +1,32 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
+import { Language } from '../types';
 
 interface TrustMeterProps {
   score: number;
+  language: Language;
 }
 
-const TrustMeter: React.FC<TrustMeterProps> = ({ score }) => {
-  const { t } = useTranslation();
+const TRANSLATIONS = {
+  en: {
+    label: 'Trust Score',
+    legend: 'LEGEND',
+    trusted: 'TRUSTED',
+    mixed: 'MIXED',
+    risky: 'RISKY',
+    scammer: 'SCAM ALERT',
+  },
+  'zh-TW': {
+    label: '信任分數',
+    legend: '傳奇人物',
+    trusted: '值得信任',
+    mixed: '評價不一',
+    risky: '風險較高',
+    scammer: '詐騙警示',
+  },
+};
+
+const TrustMeter: React.FC<TrustMeterProps> = ({ score, language }) => {
+  const t = TRANSLATIONS[language];
 
   // Color calculation based on score
   const getColor = (val: number) => {
@@ -16,11 +36,11 @@ const TrustMeter: React.FC<TrustMeterProps> = ({ score }) => {
   };
 
   const getLabel = (val: number) => {
-    if (val >= 90) return t('trustScore.legend');
-    if (val >= 75) return t('trustScore.trusted');
-    if (val >= 50) return t('trustScore.mixed');
-    if (val >= 30) return t('trustScore.risky');
-    return t('trustScore.scammer');
+    if (val >= 90) return t.legend;
+    if (val >= 75) return t.trusted;
+    if (val >= 50) return t.mixed;
+    if (val >= 30) return t.risky;
+    return t.scammer;
   };
 
   const colorClass = getColor(score);
@@ -62,7 +82,7 @@ const TrustMeter: React.FC<TrustMeterProps> = ({ score }) => {
             <span className={`text-5xl font-display font-bold ${colorClass.split(' ')[0]} drop-shadow-sm`}>
                 {score}
             </span>
-            <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-semibold">{t('trustScore.label')}</span>
+            <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-semibold">{t.label}</span>
         </div>
       </div>
       <div className={`mt-6 px-6 py-2 rounded-full border ${colorClass} bg-opacity-10 font-bold tracking-widest text-sm shadow-lg`}>

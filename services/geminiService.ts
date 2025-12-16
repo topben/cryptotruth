@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { KOLAnalysis, Sentiment, HistoryEvent } from "../types";
+import { KOLAnalysis, Sentiment, HistoryEvent, Language } from "../types";
 
 // Custom error class to carry HTTP status codes
 export class APIError extends Error {
@@ -63,7 +63,7 @@ const extractJson = (text: string): any => {
   }
 };
 
-export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => {
+export const analyzeKOLHandle = async (handle: string, language: Language = 'en'): Promise<KOLAnalysis> => {
   if (!process.env.API_KEY) {
     throw new Error("API Key is missing. Please check your environment configuration.");
   }
@@ -71,10 +71,16 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const buildPrompt = (isRetry: boolean = false) => {
+    const langInstruction = language === 'zh-TW'
+      ? "IMPORTANT: Provide all text content (bioSummary, verdict, description, details) in Traditional Chinese (繁體中文). Keep JSON keys in English."
+      : "Provide all text content in English.";
+
     if (isRetry) {
       // Simplified prompt for retry attempts
       return `
         Analyze the Cryptocurrency KOL: "${handle}".
+
+        ${langInstruction}
 
         Search for information about their reputation, predictions, and controversies.
         Also search for keywords: "ZachXBT ${handle}", "Coffeezilla ${handle}", "Reddit r/CryptoCurrency ${handle}".
@@ -99,6 +105,8 @@ export const analyzeKOLHandle = async (handle: string): Promise<KOLAnalysis> => 
     // Full detailed prompt for first attempt
     return `
       I need a detailed reputation analysis of the Cryptocurrency KOL (Key Opinion Leader) / Twitter User: "${handle}".
+
+      ${langInstruction}
 
       Using Google Search, find information about:
       1. Positive contributions, accurate analysis, successful calls (Good Reports).

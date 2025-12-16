@@ -1,4 +1,4 @@
-import { KOLAnalysis } from '../types';
+import { KOLAnalysis, Language } from '../types';
 
 const CACHE_PREFIX = 'kol_analysis_';
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -9,11 +9,18 @@ interface CachedData {
 }
 
 /**
+ * Build cache key including language
+ */
+const buildCacheKey = (handle: string, language: Language = 'en'): string => {
+  return `${CACHE_PREFIX}${handle.toLowerCase()}_${language}`;
+};
+
+/**
  * Check if cached data exists and is still valid (< 24 hours old)
  */
-export const getCachedAnalysis = (handle: string): KOLAnalysis | null => {
+export const getCachedAnalysis = (handle: string, language: Language = 'en'): KOLAnalysis | null => {
   try {
-    const key = `${CACHE_PREFIX}${handle.toLowerCase()}`;
+    const key = buildCacheKey(handle, language);
     const cached = localStorage.getItem(key);
 
     if (!cached) {
@@ -42,9 +49,9 @@ export const getCachedAnalysis = (handle: string): KOLAnalysis | null => {
 /**
  * Store analysis result in cache
  */
-export const setCachedAnalysis = (handle: string, data: KOLAnalysis): void => {
+export const setCachedAnalysis = (handle: string, data: KOLAnalysis, language: Language = 'en'): void => {
   try {
-    const key = `${CACHE_PREFIX}${handle.toLowerCase()}`;
+    const key = buildCacheKey(handle, language);
     const cachedData: CachedData = {
       data,
       timestamp: Date.now()
@@ -60,9 +67,9 @@ export const setCachedAnalysis = (handle: string, data: KOLAnalysis): void => {
 /**
  * Clear specific handle from cache
  */
-export const clearCachedAnalysis = (handle: string): void => {
+export const clearCachedAnalysis = (handle: string, language: Language = 'en'): void => {
   try {
-    const key = `${CACHE_PREFIX}${handle.toLowerCase()}`;
+    const key = buildCacheKey(handle, language);
     localStorage.removeItem(key);
     console.log(`Cleared cache for ${handle}`);
   } catch (error) {
@@ -90,9 +97,9 @@ export const clearAllCache = (): void => {
 /**
  * Get cache age in minutes for a specific handle
  */
-export const getCacheAge = (handle: string): number | null => {
+export const getCacheAge = (handle: string, language: Language = 'en'): number | null => {
   try {
-    const key = `${CACHE_PREFIX}${handle.toLowerCase()}`;
+    const key = buildCacheKey(handle, language);
     const cached = localStorage.getItem(key);
 
     if (!cached) {
