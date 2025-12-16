@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, Loader2, TrendingUp, AlertTriangle, Shield } from 'lucide-react';
 
 interface SearchInputProps {
@@ -9,22 +10,23 @@ interface SearchInputProps {
 // Categorized interesting handles for quick search
 const SUGGESTED_HANDLES = {
   controversial: [
-    { handle: 'zhusu', label: 'Zhu Su', note: '3AC Co-founder' },
-    { handle: 'KyleLDavies', label: 'Kyle Davies', note: '3AC Co-founder' },
-    { handle: 'SBF_FTX', label: 'SBF', note: 'FTX Founder' },
+    { handle: 'zhusu', label: 'Zhu Su', noteKey: 'suggestedHandles.zhusu' },
+    { handle: 'KyleLDavies', label: 'Kyle Davies', noteKey: 'suggestedHandles.kyleLDavies' },
+    { handle: 'SBF_FTX', label: 'SBF', noteKey: 'suggestedHandles.sbfFtx' },
   ],
   investigators: [
-    { handle: 'zachxbt', label: 'ZachXBT', note: 'On-chain Sleuth' },
-    { handle: 'coffeebreak_YT', label: 'Coffeezilla', note: 'Scam Investigator' },
+    { handle: 'zachxbt', label: 'ZachXBT', noteKey: 'suggestedHandles.zachxbt' },
+    { handle: 'coffeebreak_YT', label: 'Coffeezilla', noteKey: 'suggestedHandles.coffeebreak' },
   ],
   influencers: [
-    { handle: 'cobie', label: 'Cobie', note: 'Crypto Analyst' },
-    { handle: 'pentosh1', label: 'Pentoshi', note: 'Trader' },
-    { handle: 'gainzy222', label: 'Gainzy', note: 'Degen Trader' },
+    { handle: 'cobie', label: 'Cobie', noteKey: 'suggestedHandles.cobie' },
+    { handle: 'pentosh1', label: 'Pentoshi', noteKey: 'suggestedHandles.pentosh1' },
+    { handle: 'gainzy222', label: 'Gainzy', noteKey: 'suggestedHandles.gainzy222' },
   ]
 };
 
 const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<'controversial' | 'investigators' | 'influencers'>('controversial');
 
@@ -46,7 +48,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           <input
             type="text"
             className="w-full bg-transparent px-2 py-4 text-lg text-white placeholder-gray-500 focus:outline-none font-sans"
-            placeholder="Search KOL handle (e.g. pentosh1, ansem)"
+            placeholder={t('search.placeholder')}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
@@ -59,12 +61,12 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
             {isLoading ? (
               <>
                 <Loader2 className="animate-spin w-5 h-5" />
-                <span>Scanning</span>
+                <span>{t('search.scanning')}</span>
               </>
             ) : (
               <>
                 <Search className="w-5 h-5" />
-                <span>Audit</span>
+                <span>{t('search.audit')}</span>
               </>
             )}
           </button>
@@ -82,7 +84,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           }`}
         >
           <AlertTriangle className="w-4 h-4" />
-          Controversial
+          {t('categories.controversial')}
         </button>
         <button
           onClick={() => setActiveCategory('investigators')}
@@ -93,7 +95,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           }`}
         >
           <Shield className="w-4 h-4" />
-          Investigators
+          {t('categories.investigators')}
         </button>
         <button
           onClick={() => setActiveCategory('influencers')}
@@ -104,13 +106,13 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           }`}
         >
           <TrendingUp className="w-4 h-4" />
-          Influencers
+          {t('categories.influencers')}
         </button>
       </div>
 
       {/* Suggested Handles */}
       <div className="flex flex-wrap justify-center gap-2 mt-4">
-        {SUGGESTED_HANDLES[activeCategory].map(({ handle, label, note }) => (
+        {SUGGESTED_HANDLES[activeCategory].map(({ handle, noteKey }) => (
           <button
             key={handle}
             onClick={() => {
@@ -122,7 +124,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           >
             <div className="flex flex-col items-start">
               <span className="text-crypto-accent font-medium">@{handle}</span>
-              <span className="text-xs text-gray-500 group-hover:text-gray-400">{note}</span>
+              <span className="text-xs text-gray-500 group-hover:text-gray-400">{t(noteKey)}</span>
             </div>
           </button>
         ))}

@@ -1,10 +1,13 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface TrustMeterProps {
   score: number;
 }
 
 const TrustMeter: React.FC<TrustMeterProps> = ({ score }) => {
+  const { t } = useTranslation();
+
   // Color calculation based on score
   const getColor = (val: number) => {
     if (val >= 80) return 'text-crypto-success border-crypto-success shadow-crypto-success/50';
@@ -13,17 +16,17 @@ const TrustMeter: React.FC<TrustMeterProps> = ({ score }) => {
   };
 
   const getLabel = (val: number) => {
-    if (val >= 90) return 'LEGEND';
-    if (val >= 75) return 'TRUSTED';
-    if (val >= 50) return 'MIXED';
-    if (val >= 30) return 'RISKY';
-    return 'SCAMMER';
+    if (val >= 90) return t('trustScore.legend');
+    if (val >= 75) return t('trustScore.trusted');
+    if (val >= 50) return t('trustScore.mixed');
+    if (val >= 30) return t('trustScore.risky');
+    return t('trustScore.scammer');
   };
 
   const colorClass = getColor(score);
-  
+
   // Increased radius to fill the 160px box better (was 45)
-  const radius = 64; 
+  const radius = 64;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
@@ -59,7 +62,7 @@ const TrustMeter: React.FC<TrustMeterProps> = ({ score }) => {
             <span className={`text-5xl font-display font-bold ${colorClass.split(' ')[0]} drop-shadow-sm`}>
                 {score}
             </span>
-            <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-semibold">Trust Score</span>
+            <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-semibold">{t('trustScore.label')}</span>
         </div>
       </div>
       <div className={`mt-6 px-6 py-2 rounded-full border ${colorClass} bg-opacity-10 font-bold tracking-widest text-sm shadow-lg`}>
