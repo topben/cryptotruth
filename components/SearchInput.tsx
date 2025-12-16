@@ -1,32 +1,76 @@
 import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Search, Loader2, TrendingUp, AlertTriangle, Shield } from 'lucide-react';
+import { Language } from '../types';
 
 interface SearchInputProps {
   onSearch: (handle: string) => void;
   isLoading: boolean;
+  language: Language;
 }
+
+const TRANSLATIONS = {
+  en: {
+    placeholder: 'Enter Twitter/X handle...',
+    scanning: 'Scanning...',
+    audit: 'Audit',
+    categories: {
+      controversial: 'Controversial',
+      investigators: 'Investigators',
+      influencers: 'Influencers',
+    },
+    suggestedHandles: {
+      zhusu: '3AC Co-founder',
+      kyleLDavies: '3AC Co-founder',
+      sbfFtx: 'FTX Founder',
+      zachxbt: 'On-chain Sleuth',
+      coffeebreak: 'Scam Investigator',
+      cobie: 'Crypto Trader',
+      pentosh1: 'Crypto Analyst',
+      gainzy222: 'Trading Influencer',
+    },
+  },
+  'zh-TW': {
+    placeholder: '輸入 Twitter/X 帳號...',
+    scanning: '掃描中...',
+    audit: '審核',
+    categories: {
+      controversial: '爭議人物',
+      investigators: '調查員',
+      influencers: '意見領袖',
+    },
+    suggestedHandles: {
+      zhusu: '3AC 聯合創辦人',
+      kyleLDavies: '3AC 聯合創辦人',
+      sbfFtx: 'FTX 創辦人',
+      zachxbt: '鏈上偵探',
+      coffeebreak: '詐騙調查員',
+      cobie: '加密貨幣交易員',
+      pentosh1: '加密貨幣分析師',
+      gainzy222: '交易意見領袖',
+    },
+  },
+};
 
 // Categorized interesting handles for quick search
 const SUGGESTED_HANDLES = {
   controversial: [
-    { handle: 'zhusu', label: 'Zhu Su', noteKey: 'suggestedHandles.zhusu' },
-    { handle: 'KyleLDavies', label: 'Kyle Davies', noteKey: 'suggestedHandles.kyleLDavies' },
-    { handle: 'SBF_FTX', label: 'SBF', noteKey: 'suggestedHandles.sbfFtx' },
+    { handle: 'zhusu', label: 'Zhu Su', noteKey: 'zhusu' as const },
+    { handle: 'KyleLDavies', label: 'Kyle Davies', noteKey: 'kyleLDavies' as const },
+    { handle: 'SBF_FTX', label: 'SBF', noteKey: 'sbfFtx' as const },
   ],
   investigators: [
-    { handle: 'zachxbt', label: 'ZachXBT', noteKey: 'suggestedHandles.zachxbt' },
-    { handle: 'coffeebreak_YT', label: 'Coffeezilla', noteKey: 'suggestedHandles.coffeebreak' },
+    { handle: 'zachxbt', label: 'ZachXBT', noteKey: 'zachxbt' as const },
+    { handle: 'coffeebreak_YT', label: 'Coffeezilla', noteKey: 'coffeebreak' as const },
   ],
   influencers: [
-    { handle: 'cobie', label: 'Cobie', noteKey: 'suggestedHandles.cobie' },
-    { handle: 'pentosh1', label: 'Pentoshi', noteKey: 'suggestedHandles.pentosh1' },
-    { handle: 'gainzy222', label: 'Gainzy', noteKey: 'suggestedHandles.gainzy222' },
+    { handle: 'cobie', label: 'Cobie', noteKey: 'cobie' as const },
+    { handle: 'pentosh1', label: 'Pentoshi', noteKey: 'pentosh1' as const },
+    { handle: 'gainzy222', label: 'Gainzy', noteKey: 'gainzy222' as const },
   ]
 };
 
-const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
-  const { t } = useTranslation();
+const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language }) => {
+  const t = TRANSLATIONS[language];
   const [input, setInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<'controversial' | 'investigators' | 'influencers'>('controversial');
 
@@ -48,7 +92,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           <input
             type="text"
             className="w-full bg-transparent px-2 py-4 text-lg text-white placeholder-gray-500 focus:outline-none font-sans"
-            placeholder={t('search.placeholder')}
+            placeholder={t.placeholder}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
@@ -61,12 +105,12 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
             {isLoading ? (
               <>
                 <Loader2 className="animate-spin w-5 h-5" />
-                <span>{t('search.scanning')}</span>
+                <span>{t.scanning}</span>
               </>
             ) : (
               <>
                 <Search className="w-5 h-5" />
-                <span>{t('search.audit')}</span>
+                <span>{t.audit}</span>
               </>
             )}
           </button>
@@ -84,7 +128,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           }`}
         >
           <AlertTriangle className="w-4 h-4" />
-          {t('categories.controversial')}
+          {t.categories.controversial}
         </button>
         <button
           onClick={() => setActiveCategory('investigators')}
@@ -95,7 +139,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           }`}
         >
           <Shield className="w-4 h-4" />
-          {t('categories.investigators')}
+          {t.categories.investigators}
         </button>
         <button
           onClick={() => setActiveCategory('influencers')}
@@ -106,7 +150,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           }`}
         >
           <TrendingUp className="w-4 h-4" />
-          {t('categories.influencers')}
+          {t.categories.influencers}
         </button>
       </div>
 
@@ -124,7 +168,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading }) => {
           >
             <div className="flex flex-col items-start">
               <span className="text-crypto-accent font-medium">@{handle}</span>
-              <span className="text-xs text-gray-500 group-hover:text-gray-400">{t(noteKey)}</span>
+              <span className="text-xs text-gray-500 group-hover:text-gray-400">{t.suggestedHandles[noteKey]}</span>
             </div>
           </button>
         ))}
