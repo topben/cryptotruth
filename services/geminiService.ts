@@ -1,4 +1,4 @@
-import { GoogleGenAI, SchemaType } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { KOLAnalysis, Language } from "../types";
 
 export class APIError extends Error {
@@ -23,39 +23,39 @@ const extractStatusCode = (error: any): number | null => {
 
 // Define output Schema to save tokens on prompt examples
 const analysisSchema = {
-  type: SchemaType.OBJECT,
+  type: Type.OBJECT,
   properties: {
-    displayName: { type: SchemaType.STRING, description: "Name of the KOL" },
-    bioSummary: { type: SchemaType.STRING, description: "1-2 sentence summary of their niche" },
-    trustScore: { type: SchemaType.NUMBER, description: "0-100 score based on reputation (lower if scammer/shiller)" },
-    totalWins: { type: SchemaType.NUMBER, description: "Count of successful calls/good reports" },
-    totalLosses: { type: SchemaType.NUMBER, description: "Count of failed calls/scams/controversies" },
-    followersCount: { type: SchemaType.STRING, description: "Approximate follower count (e.g. '100K')" },
+    displayName: { type: Type.STRING, description: "Name of the KOL" },
+    bioSummary: { type: Type.STRING, description: "1-2 sentence summary of their niche" },
+    trustScore: { type: Type.NUMBER, description: "0-100 score based on reputation (lower if scammer/shiller)" },
+    totalWins: { type: Type.NUMBER, description: "Count of successful calls/good reports" },
+    totalLosses: { type: Type.NUMBER, description: "Count of failed calls/scams/controversies" },
+    followersCount: { type: Type.STRING, description: "Approximate follower count (e.g. '100K')" },
     walletAddresses: {
-      type: SchemaType.ARRAY,
-      items: { type: SchemaType.STRING },
+      type: Type.ARRAY,
+      items: { type: Type.STRING },
       description: "Public wallet addresses found (ETH, SOL, etc.)"
     },
-    verdict: { type: SchemaType.STRING, description: "One-sentence verdict (e.g. 'High Risk Scammer')" },
+    verdict: { type: Type.STRING, description: "One-sentence verdict (e.g. 'High Risk Scammer')" },
     history: {
-      type: SchemaType.ARRAY,
+      type: Type.ARRAY,
       items: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          id: { type: SchemaType.STRING },
-          date: { type: SchemaType.STRING, description: "YYYY-MM-DD or 'Recent'" },
-          description: { type: SchemaType.STRING, description: "Short title of event" },
+          id: { type: Type.STRING },
+          date: { type: Type.STRING, description: "YYYY-MM-DD or 'Recent'" },
+          description: { type: Type.STRING, description: "Short title of event" },
           type: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             enum: ["PREDICTION_WIN", "PREDICTION_LOSS", "CONTROVERSY", "NEUTRAL_NEWS"]
           },
-          token: { type: SchemaType.STRING, description: "Token symbol if applicable", nullable: true },
+          token: { type: Type.STRING, description: "Token symbol if applicable", nullable: true },
           sentiment: {
-            type: SchemaType.STRING,
+            type: Type.STRING,
             enum: ["POSITIVE", "NEGATIVE", "NEUTRAL"]
           },
-          details: { type: SchemaType.STRING, description: "Explanation of the event" },
-          sourceUrl: { type: SchemaType.STRING, description: "URL to evidence source", nullable: true }
+          details: { type: Type.STRING, description: "Explanation of the event" },
+          sourceUrl: { type: Type.STRING, description: "URL to evidence source", nullable: true }
         },
         required: ["id", "date", "description", "type", "sentiment", "details"]
       }
