@@ -233,19 +233,37 @@ export default async function handler(req: any, res: any) {
       ? "Output fields 'bioSummary', 'verdict', 'description', 'details' in Traditional Chinese (繁體中文)."
       : "Output all text fields in English.";
 
-    // Optimized prompt - removed wallet extraction, simplified search
+    // Optimized prompt with specific reputation sources
     const prompt = `
       Analyze Crypto KOL: "${handle}".
       ${langInstruction}
 
-      Tasks:
-      1. Search for recent news, major allegations, and track record. Do not deep dive into raw blockchain transaction pages.
-      2. Find positive calls (Good Reports) and scams/rug pulls/failed predictions (Negative Findings).
-      3. Detect paid promos or shilling.
+      REQUIRED SEARCHES (use exact queries):
+      1. "ZachXBT ${handle}" - Find any investigations, exposés, or mentions by crypto detective ZachXBT
+      2. "Coffeezilla ${handle}" - Find any coverage or investigations by YouTube investigator Coffeezilla
+      3. "Reddit r/CryptoCurrency ${handle}" - Find community discussions, warnings, or praise on Reddit
+      4. "${handle} crypto scam" and "${handle} rug pull" - Find scam allegations
+      5. "${handle} paid promotion" and "${handle} sponsored" - Find undisclosed paid content
 
-      Score logic:
-      - High score (80+): Accurate calls, community trust.
-      - Low score (<40): Paid promos, scams, rug pulls.
+      ANALYSIS TASKS:
+      1. Good Reports (PREDICTION_WIN): Accurate price calls, early legitimate project discoveries, helpful analysis, community contributions
+      2. Negative Findings (PREDICTION_LOSS/CONTROVERSY): Rug pulls, scam promotions, failed predictions, pump-and-dump schemes, exit scams, stolen funds allegations
+      3. Paid Promos/Shilling Detection: Undisclosed sponsorships, coordinated shilling campaigns, sudden project promotions without disclosure, "influencer" token launches
+
+      EVIDENCE PRIORITY:
+      - ZachXBT threads carry high weight (on-chain investigator)
+      - Coffeezilla videos carry high weight (deep-dive investigations)
+      - Reddit consensus with evidence carries medium weight
+      - Multiple independent sources confirming same issue = high confidence
+
+      SCORE LOGIC:
+      - 80-100: Proven track record, community trust, no scam involvement, transparent about sponsorships
+      - 60-79: Mixed record, some failed calls but no fraud, generally trusted
+      - 40-59: Questionable promotions, several failed calls, some community distrust
+      - 20-39: Paid shilling, multiple rug pull associations, poor prediction record
+      - 0-19: Confirmed scammer, rug puller, or fraud perpetrator (ZachXBT/Coffeezilla exposed)
+
+      IMPORTANT: Do not deep dive into raw blockchain transaction pages. Focus on reputation and track record.
     `;
 
     const analysisSchema = {
