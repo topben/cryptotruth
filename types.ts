@@ -33,6 +33,8 @@ export interface KOLAnalysis {
   history: HistoryEvent[];
   sources: SourceLink[];
   lastAnalyzed: string;
+  source?: 'cache' | 'api'; // Whether result came from cache or live API
+  cachedAt?: number; // Timestamp when result was cached
 }
 
 export type LoadingState = 'IDLE' | 'SEARCHING' | 'ANALYZING' | 'COMPLETED' | 'ERROR';

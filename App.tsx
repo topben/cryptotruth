@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { KOLAnalysis, LoadingState, Language } from './types';
 import { analyzeKOLHandle, APIError } from './services/geminiService';
-import { getCachedAnalysis, setCachedAnalysis, getCacheAge } from './services/cacheService';
 import SearchInput from './components/SearchInput';
 import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
@@ -46,6 +45,9 @@ const UI_TEXT = {
       shareOnX: 'Share on X',
       refreshAnalysis: 'Refresh Analysis',
       cachedAgo: '📦 Cached {time} ago',
+      cachedResult: '📦 Cached Result',
+      liveAnalysis: '🟢 Live Analysis',
+      forceRefresh: 'Force Refresh',
       verdict: 'AI Verdict',
       reportRatio: 'Report Ratio',
       evidenceSources: 'Evidence Sources',
@@ -94,6 +96,9 @@ const UI_TEXT = {
       shareOnX: '分享到 X',
       refreshAnalysis: '重新分析',
       cachedAgo: '📦 {time} 前快取',
+      cachedResult: '📦 快取結果',
+      liveAnalysis: '🟢 即時分析',
+      forceRefresh: '強制更新',
       verdict: 'AI 評斷',
       reportRatio: '報導比例',
       evidenceSources: '證據來源',
@@ -136,20 +141,6 @@ const App: React.FC = () => {
   const handleSearch = async (handle: string, forceRefresh: boolean = false) => {
     setError(null);
     setAnalysis(null);
-
-    // Check cache first (unless force refresh is requested)
-    // Cache key includes language to avoid showing wrong language results
-    if (!forceRefresh) {
-      const cached = getCachedAnalysis(handle, language);
-      if (cached) {
-        console.log(`Using cached data for ${handle} (${language})`);
-        setAnalysis(cached);
-        setLoadingState('COMPLETED');
-        return;
-      }
-    }
-
-    // No cache or force refresh - fetch from API
     setLoadingState('SEARCHING');
     setLoadingMessageIndex(0);
 
@@ -160,11 +151,8 @@ const App: React.FC = () => {
     }, 1500);
 
     try {
-      // Pass language to Gemini so it returns content in the correct language
-      const result = await analyzeKOLHandle(handle, language);
-
-      // Cache the result with language-specific key
-      setCachedAnalysis(handle, result, language);
+      // Pass language and forceRefresh to API (server handles caching with Vercel Blob)
+      const result = await analyzeKOLHandle(handle, language, forceRefresh);
 
       setAnalysis(result);
       setLoadingState('COMPLETED');
@@ -346,21 +334,39 @@ const App: React.FC = () => {
                       </button>
                     </div>
 
-                    {/* Cache Info */}
-                    {(() => {
-                      const cacheAge = getCacheAge(analysis.handle, language);
-                      if (cacheAge !== null && cacheAge < 24 * 60) {
-                        const timeDisplay = cacheAge < 60 ? `${cacheAge}m` : `${Math.round(cacheAge / 60)}h`;
-                        return (
-                          <div className="bg-blue-900/20 p-3 rounded-xl border border-blue-800 text-center">
-                            <p className="text-xs text-blue-400">
-                              {t.results.cachedAgo.replace('{time}', timeDisplay)}
-                            </p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
+                    {/* Cache/Live Badge */}
+                    {analysis.source === 'cache' ? (
+                      <div className="bg-blue-900/20 p-3 rounded-xl border border-blue-800">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm text-blue-400 font-medium">
+                            {t.results.cachedResult}
+                          </span>
+                          <button
+                            onClick={handleRefresh}
+                            className="text-xs bg-blue-800 hover:bg-blue-700 text-blue-200 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            {t.results.forceRefresh}
+                          </button>
+                        </div>
+                        {analysis.cachedAt && (
+                          <p className="text-xs text-blue-500 mt-1">
+                            {(() => {
+                              const ageMs = Date.now() - analysis.cachedAt;
+                              const ageMinutes = Math.round(ageMs / 1000 / 60);
+                              const timeDisplay = ageMinutes < 60 ? `${ageMinutes}m` : `${Math.round(ageMinutes / 60)}h`;
+                              return t.results.cachedAgo.replace('{time}', timeDisplay);
+                            })()}
+                          </p>
+                        )}
+                      </div>
+                    ) : analysis.source === 'api' ? (
+                      <div className="bg-green-900/20 p-3 rounded-xl border border-green-800 text-center">
+                        <span className="text-sm text-green-400 font-medium">
+                          {t.results.liveAnalysis}
+                        </span>
+                      </div>
+                    ) : null}
 
                     {/* Verdict Display */}
                     {analysis.verdict && (
