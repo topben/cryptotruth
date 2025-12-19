@@ -9,21 +9,23 @@ const MAX_HANDLE_LENGTH = 50;
 const ALLOWED_LANGUAGES = ['en', 'zh-TW'];
 
 /**
- * Sanitize handle input - remove @ prefix and validate format
+ * Sanitize input - accepts handles, display names (including non-Latin), nicknames
+ * Blocks dangerous characters but allows Unicode text
  */
-const sanitizeHandle = (handle: string): string | null => {
-  if (!handle || typeof handle !== 'string') return null;
+const sanitizeInput = (input: string): string | null => {
+  if (!input || typeof input !== 'string') return null;
 
   // Remove @ prefix if present
-  let sanitized = handle.trim().replace(/^@/, '');
+  let sanitized = input.trim().replace(/^@/, '');
 
   // Check length
   if (sanitized.length === 0 || sanitized.length > MAX_HANDLE_LENGTH) return null;
 
-  // Allow only alphanumeric, underscores (Twitter-like handles)
-  if (!/^[a-zA-Z0-9_]+$/.test(sanitized)) return null;
+  // Block dangerous patterns (injection attempts) but allow Unicode
+  const dangerousPatterns = /[<>{}()\[\];`$\\|&]/;
+  if (dangerousPatterns.test(sanitized)) return null;
 
-  return sanitized.toLowerCase();
+  return sanitized;
 };
 
 /**
@@ -187,13 +189,16 @@ export default async function handler(req: any, res: any) {
 
     // === INPUT VALIDATION ===
 
-    // Validate and sanitize handle
-    const handle = sanitizeHandle(rawHandle);
-    if (!handle) {
+    // Validate and sanitize input (handles, display names, nicknames)
+    const inputQuery = sanitizeInput(rawHandle);
+    if (!inputQuery) {
       return res.status(400).json({
-        error: 'Invalid handle format. Use alphanumeric characters and underscores only (max 50 chars).'
+        error: 'Invalid input format. Please enter a valid handle or display name (max 50 chars).'
       });
     }
+
+    // Use input as cache key (normalized)
+    const handle = inputQuery.toLowerCase().replace(/\s+/g, '_');
 
     // Validate language
     const language = ALLOWED_LANGUAGES.includes(rawLanguage) ? rawLanguage : 'en';
@@ -230,34 +235,74 @@ export default async function handler(req: any, res: any) {
     const ai = new GoogleGenAI({ apiKey });
 
     const langInstruction = language === 'zh-TW'
-      ? "Output fields 'bioSummary', 'verdict', 'description', 'details' in Traditional Chinese (繁體中文)."
+      ? "Output fields 'bioSummary', 'verdict', 'description', 'details', 'resolutionNote' in Traditional Chinese (繁體中文)."
       : "Output all text fields in English.";
 
-    // Optimized prompt - removed wallet extraction, simplified search
+    const insufficientVerdictText = language === 'zh-TW'
+      ? "公開資料不足，無法評估風險"
+      : "Insufficient public data to assess risk";
+
+    // Two-phase prompt: Identity Resolution + Reputation Analysis
     const prompt = `
-      Analyze Crypto KOL: "${handle}".
+      Analyze Crypto KOL: "${inputQuery}".
       ${langInstruction}
 
-      Tasks:
-      1. Search for recent news, major allegations, and track record. Do not deep dive into raw blockchain transaction pages.
-      2. Find positive calls (Good Reports) and scams/rug pulls/failed predictions (Negative Findings).
-      3. Detect paid promos or shilling.
+      PHASE 1 - Identity Resolution:
+      - Determine if "${inputQuery}" corresponds to a crypto-related individual/account.
+      - Try to resolve the most likely Twitter/X handle (if any).
+      - Provide confidence (0-100) for the identity resolution.
+      - If no clear account found, set confidence low and note "unresolved".
 
-      Score logic:
-      - High score (80+): Accurate calls, community trust.
-      - Low score (<40): Paid promos, scams, rug pulls.
+      PHASE 2 - Reputation Analysis (ONLY if identity is reasonably confident):
+      - Use ONLY publicly verifiable sources (news, public posts, forums).
+      - Do NOT invent blockchain transactions or unverified claims.
+      - Do NOT treat lack of data as negative evidence.
+
+      CRITICAL RULES:
+      - If insufficient public data exists:
+        * Set trustScore to null
+        * Set verdict to: "${insufficientVerdictText}"
+        * Set history to empty array []
+        * Set dataCoverage to "INSUFFICIENT"
+      - Each history event MUST have a valid sourceUrl. If no source URL available, do NOT include that event.
+      - dataCoverage levels:
+        * HIGH: Multiple reliable sources, verified account
+        * MEDIUM: Some sources, partially verified
+        * LOW: Few sources, uncertain verification
+        * INSUFFICIENT: No reliable public data
+
+      Score logic (only when data is sufficient):
+      - High score (80+): Accurate calls, community trust, verified track record.
+      - Low score (<40): Documented paid promos, scams, rug pulls.
     `;
 
     const analysisSchema = {
       type: Type.OBJECT,
       properties: {
+        identity: {
+          type: Type.OBJECT,
+          description: "Identity resolution result",
+          properties: {
+            input: { type: Type.STRING, description: "Original search input" },
+            resolvedHandle: { type: Type.STRING, description: "Twitter/X handle if found", nullable: true },
+            displayName: { type: Type.STRING, description: "Display name if found", nullable: true },
+            confidence: { type: Type.NUMBER, description: "Confidence 0-100 for identity resolution" },
+            resolutionNote: { type: Type.STRING, description: "Brief note about resolution result" }
+          },
+          required: ["input", "confidence", "resolutionNote"]
+        },
+        dataCoverage: {
+          type: Type.STRING,
+          enum: ["HIGH", "MEDIUM", "LOW", "INSUFFICIENT"],
+          description: "Level of available public data"
+        },
         displayName: { type: Type.STRING, description: "Name of the KOL" },
         bioSummary: { type: Type.STRING, description: "1-2 sentence summary of their niche" },
-        trustScore: { type: Type.NUMBER, description: "0-100 score based on reputation (lower if scammer/shiller)" },
+        trustScore: { type: Type.NUMBER, description: "0-100 score, or null if insufficient data", nullable: true },
         totalWins: { type: Type.NUMBER, description: "Count of successful calls/good reports" },
         totalLosses: { type: Type.NUMBER, description: "Count of failed calls/scams/controversies" },
         followersCount: { type: Type.STRING, description: "Approximate follower count (e.g. '100K')" },
-        verdict: { type: Type.STRING, description: "One-sentence verdict (e.g. 'High Risk Scammer')" },
+        verdict: { type: Type.STRING, description: "One-sentence verdict" },
         history: {
           type: Type.ARRAY,
           items: {
@@ -276,13 +321,13 @@ export default async function handler(req: any, res: any) {
                 enum: ["POSITIVE", "NEGATIVE", "NEUTRAL"]
               },
               details: { type: Type.STRING, description: "Explanation of the event" },
-              sourceUrl: { type: Type.STRING, description: "URL to evidence source", nullable: true }
+              sourceUrl: { type: Type.STRING, description: "Required URL to evidence source" }
             },
-            required: ["id", "date", "description", "type", "sentiment", "details"]
+            required: ["id", "date", "description", "type", "sentiment", "details", "sourceUrl"]
           }
         }
       },
-      required: ["displayName", "bioSummary", "trustScore", "totalWins", "totalLosses", "verdict", "history"]
+      required: ["identity", "dataCoverage", "displayName", "bioSummary", "totalWins", "totalLosses", "verdict", "history"]
     };
 
     const response = await ai.models.generateContent({
@@ -302,6 +347,16 @@ export default async function handler(req: any, res: any) {
     const sources = groundingChunks
       .map((chunk: any) => chunk.web ? { title: chunk.web.title, url: chunk.web.uri } : null)
       .filter((s: any) => s !== null);
+
+    // Ensure identity.input is set to original query
+    if (data.identity) {
+      data.identity.input = inputQuery;
+    }
+
+    // Filter history events without sourceUrl
+    if (data.history && Array.isArray(data.history)) {
+      data.history = data.history.filter((event: any) => event.sourceUrl);
+    }
 
     const result = {
       ...data,

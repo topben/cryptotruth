@@ -59,7 +59,21 @@ const UI_TEXT = {
     },
     search: {
       newSearch: 'New Search'
-    }
+    },
+    identity: {
+      title: 'Identity Resolution',
+      input: 'Search Input',
+      resolvedHandle: 'Resolved Handle',
+      confidence: 'Confidence',
+      unresolved: 'Unresolved'
+    },
+    coverage: {
+      HIGH: '🟢 Data sufficient',
+      MEDIUM: '🟡 Limited data',
+      LOW: '🟠 Sparse data',
+      INSUFFICIENT: '🔴 Insufficient data'
+    },
+    insufficientData: 'Insufficient public data to assess trust score'
   },
   'zh-TW': {
     poweredBy: '由 Google Gemini 提供技術支援',
@@ -110,7 +124,21 @@ const UI_TEXT = {
     },
     search: {
       newSearch: '新搜尋'
-    }
+    },
+    identity: {
+      title: '身份解析',
+      input: '搜尋輸入',
+      resolvedHandle: '解析帳號',
+      confidence: '信心度',
+      unresolved: '未解析'
+    },
+    coverage: {
+      HIGH: '🟢 資料充足',
+      MEDIUM: '🟡 資料有限',
+      LOW: '🟠 資料稀少',
+      INSUFFICIENT: '🔴 資料不足'
+    },
+    insufficientData: '公開資料不足，無法評估信任分數'
   }
 };
 
@@ -191,7 +219,7 @@ const App: React.FC = () => {
   const handleShareOnX = () => {
     if (!analysis) return;
 
-    const verdict = analysis.verdict || `Trust Score: ${analysis.trustScore}/100`;
+    const verdict = analysis.verdict || (analysis.trustScore !== null ? `Trust Score: ${analysis.trustScore}/100` : t.insufficientData);
     const tweetText = `⚠️ ${t.share.tweetTemplate
       .replace('{handle}', analysis.handle)
       .replace('{verdict}', verdict)
@@ -290,7 +318,7 @@ const App: React.FC = () => {
                                 {analysis.bioSummary}
                             </p>
 
-                            <div className="flex gap-4">
+                            <div className="flex gap-4 flex-wrap">
                                 <div className="bg-gray-900/50 px-4 py-2 rounded-lg border border-gray-700">
                                     <span className="block text-xs text-gray-500 uppercase">{t.results.goodReports}</span>
                                     <span className="text-xl font-bold text-crypto-success flex items-center gap-1">
@@ -304,13 +332,53 @@ const App: React.FC = () => {
                                     </span>
                                 </div>
                             </div>
+
+                            {/* Identity Resolution Card */}
+                            {analysis.identity && (
+                              <div className="mt-4 bg-gray-900/30 px-4 py-3 rounded-lg border border-gray-700">
+                                <h4 className="text-xs text-gray-500 uppercase mb-2">{t.identity.title}</h4>
+                                <div className="flex flex-wrap gap-4 text-sm">
+                                  <div>
+                                    <span className="text-gray-500">{t.identity.input}: </span>
+                                    <span className="text-white font-mono">{analysis.identity.input}</span>
+                                  </div>
+                                  {analysis.identity.resolvedHandle && (
+                                    <div>
+                                      <span className="text-gray-500">{t.identity.resolvedHandle}: </span>
+                                      <span className="text-crypto-accent font-mono">@{analysis.identity.resolvedHandle}</span>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <span className="text-gray-500">{t.identity.confidence}: </span>
+                                    <span className={`font-bold ${analysis.identity.confidence >= 70 ? 'text-crypto-success' : analysis.identity.confidence >= 40 ? 'text-yellow-400' : 'text-crypto-danger'}`}>
+                                      {analysis.identity.confidence}%
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="text-gray-400 text-xs mt-1 italic">{analysis.identity.resolutionNote}</p>
+                              </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
                 {/* Trust Meter */}
                 <div className="md:col-span-4 flex flex-col gap-4">
-                    <TrustMeter score={analysis.trustScore} language={language} />
+                    {analysis.trustScore !== null ? (
+                      <TrustMeter score={analysis.trustScore} language={language} />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-6 bg-crypto-card rounded-2xl shadow-xl border border-gray-800 h-full w-full">
+                        <div className="text-5xl mb-4">❓</div>
+                        <p className="text-gray-400 text-center text-sm">{t.insufficientData}</p>
+                      </div>
+                    )}
+
+                    {/* Data Coverage Indicator */}
+                    {analysis.dataCoverage && (
+                      <div className="text-center text-sm font-medium">
+                        {t.coverage[analysis.dataCoverage]}
+                      </div>
+                    )}
 
                     {/* Action Buttons */}
                     <div className="flex flex-col gap-2">

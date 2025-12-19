@@ -25,7 +25,10 @@ const HistoryTimeline: React.FC<HistoryTimelineProps> = ({ events, title, langua
   const t = TRANSLATIONS[language];
   const displayTitle = title ?? t.title;
 
-  if (!events || events.length === 0) {
+  // Filter out events without sourceUrl
+  const validEvents = events?.filter(event => event.sourceUrl) || [];
+
+  if (validEvents.length === 0) {
     return <div className="text-gray-500 italic text-center py-8">{t.noEvents}</div>;
   }
 
@@ -55,7 +58,7 @@ const HistoryTimeline: React.FC<HistoryTimelineProps> = ({ events, title, langua
     <div className="space-y-4">
       <h3 className="text-xl font-display font-semibold text-white mb-4">{displayTitle}</h3>
       <div className="relative border-l-2 border-gray-800 ml-3 space-y-6 pl-6 py-2">
-        {events.map((event, idx) => (
+        {validEvents.map((event, idx) => (
           <div key={idx} className={`relative bg-gray-900/50 p-4 rounded-r-lg border-l-4 ${getBorderColor(event.type)} hover:bg-gray-800 transition-colors`}>
             {/* Timeline Dot */}
             <div className="absolute -left-[35px] top-4 bg-crypto-dark rounded-full p-1 border border-gray-700">
