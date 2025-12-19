@@ -47,6 +47,9 @@ export interface KOLAnalysis {
   cachedAt?: number; // Timestamp when result was cached
   identity?: IdentityResolution; // Identity resolution info
   dataCoverage?: DataCoverage; // Data availability level
+  suggestedQueries?: string[]; // Suggested search queries for low-data cases
+  candidates?: string[]; // Candidate handles/accounts found
+  scanMode?: 'quick' | 'deep'; // Which scan mode was used
 }
 
 export type LoadingState = 'IDLE' | 'SEARCHING' | 'ANALYZING' | 'COMPLETED' | 'ERROR';

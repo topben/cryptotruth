@@ -73,7 +73,13 @@ const UI_TEXT = {
       LOW: '🟠 Sparse data',
       INSUFFICIENT: '🔴 Insufficient data'
     },
-    insufficientData: 'Insufficient public data to assess trust score'
+    insufficientData: 'Insufficient public data to assess trust score',
+    suggestions: {
+      title: 'Try These Searches',
+      candidates: 'Possible Accounts',
+      deepScan: 'Run Deep Scan',
+      quickScanNote: 'Quick scan complete. Click "Run Deep Scan" for full analysis.'
+    }
   },
   'zh-TW': {
     poweredBy: '由 Google Gemini 提供技術支援',
@@ -138,7 +144,13 @@ const UI_TEXT = {
       LOW: '🟠 資料稀少',
       INSUFFICIENT: '🔴 資料不足'
     },
-    insufficientData: '公開資料不足，無法評估信任分數'
+    insufficientData: '公開資料不足，無法評估信任分數',
+    suggestions: {
+      title: '試試這些搜尋',
+      candidates: '可能的帳號',
+      deepScan: '執行深度掃描',
+      quickScanNote: '快速掃描完成。點擊「執行深度掃描」獲得完整分析。'
+    }
   }
 };
 
@@ -356,6 +368,56 @@ const App: React.FC = () => {
                                   </div>
                                 </div>
                                 <p className="text-gray-400 text-xs mt-1 italic">{analysis.identity.resolutionNote}</p>
+                              </div>
+                            )}
+
+                            {/* Suggestions Block (Quick Scan) */}
+                            {analysis.scanMode === 'quick' && (
+                              <div className="mt-4 bg-yellow-900/20 px-4 py-3 rounded-lg border border-yellow-800">
+                                <p className="text-yellow-400 text-sm mb-3">{t.suggestions.quickScanNote}</p>
+                                <button
+                                  onClick={handleRefresh}
+                                  className="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center gap-2 mb-3"
+                                >
+                                  <Search size={16} />
+                                  {t.suggestions.deepScan}
+                                </button>
+
+                                {/* Suggested Queries */}
+                                {analysis.suggestedQueries && analysis.suggestedQueries.length > 0 && (
+                                  <div className="mb-2">
+                                    <span className="text-xs text-gray-500 uppercase">{t.suggestions.title}:</span>
+                                    <div className="flex flex-wrap gap-2 mt-1">
+                                      {analysis.suggestedQueries.map((query, idx) => (
+                                        <button
+                                          key={idx}
+                                          onClick={() => handleSearch(query, false)}
+                                          className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm px-3 py-1 rounded-full border border-gray-600 transition-colors"
+                                        >
+                                          {query}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Candidate Handles */}
+                                {analysis.candidates && analysis.candidates.length > 0 && (
+                                  <div>
+                                    <span className="text-xs text-gray-500 uppercase">{t.suggestions.candidates}:</span>
+                                    <div className="flex flex-wrap gap-2 mt-1">
+                                      {analysis.candidates.map((handle, idx) => (
+                                        <button
+                                          key={idx}
+                                          onClick={() => handleSearch(handle, true)}
+                                          className="bg-crypto-accent/20 hover:bg-crypto-accent/30 text-crypto-accent text-sm px-3 py-1 rounded-full border border-crypto-accent/50 transition-colors font-mono"
+                                        >
+                                          @{handle}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                         </div>

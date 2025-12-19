@@ -112,18 +112,18 @@ const checkRateLimit = async (ip: string): Promise<{ allowed: boolean; remaining
 };
 
 /**
- * Build cache file path for Vercel Blob
+ * Build cache file path for Vercel Blob (mode-aware)
  */
-const buildCachePath = (handle: string, language: string): string => {
-  return `cache/${handle.toLowerCase()}-${language}.json`;
+const buildCachePath = (handle: string, language: string, mode: 'quick' | 'deep'): string => {
+  return `cache/${mode}/${handle.toLowerCase()}-${language}-v1.json`;
 };
 
 /**
  * Check if cached data exists and is still valid
  */
-const getCachedAnalysis = async (handle: string, language: string) => {
+const getCachedAnalysis = async (handle: string, language: string, mode: 'quick' | 'deep') => {
   try {
-    const cachePath = buildCachePath(handle, language);
+    const cachePath = buildCachePath(handle, language, mode);
     const { blobs } = await list({ prefix: cachePath });
 
     if (blobs.length === 0) {
@@ -158,9 +158,9 @@ const getCachedAnalysis = async (handle: string, language: string) => {
 /**
  * Save analysis result to Vercel Blob cache
  */
-const setCachedAnalysis = async (handle: string, language: string, data: any) => {
+const setCachedAnalysis = async (handle: string, language: string, mode: 'quick' | 'deep', data: any) => {
   try {
-    const cachePath = buildCachePath(handle, language);
+    const cachePath = buildCachePath(handle, language, mode);
     await put(cachePath, JSON.stringify(data), {
       access: 'public',
       addRandomSuffix: false,
@@ -188,8 +188,6 @@ export default async function handler(req: any, res: any) {
     const { handle: rawHandle, language: rawLanguage, forceRefresh } = req.body;
 
     // === INPUT VALIDATION ===
-
-    // Validate and sanitize input (handles, display names, nicknames)
     const inputQuery = sanitizeInput(rawHandle);
     if (!inputQuery) {
       return res.status(400).json({
@@ -197,131 +195,181 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Use input as cache key (normalized)
     const handle = inputQuery.toLowerCase().replace(/\s+/g, '_');
-
-    // Validate language
     const language = ALLOWED_LANGUAGES.includes(rawLanguage) ? rawLanguage : 'en';
 
-    // === CACHE CHECK (no rate limit for cache hits) ===
-    if (!forceRefresh) {
-      const cached = await getCachedAnalysis(handle, language);
-      if (cached) {
-        return res.status(200).json({
-          ...cached.data,
-          handle,
-          source: 'cache',
-          cachedAt: cached.cachedAt
-        });
-      }
+    // forceRefresh=true triggers DEEP SCAN, otherwise QUICK SCAN
+    const scanMode: 'quick' | 'deep' = forceRefresh ? 'deep' : 'quick';
+
+    // === CACHE CHECK ===
+    const cached = await getCachedAnalysis(handle, language, scanMode);
+    if (cached) {
+      return res.status(200).json({
+        ...cached.data,
+        handle,
+        source: 'cache',
+        cachedAt: cached.cachedAt
+      });
     }
 
-    // === RATE LIMITING (only for API calls, not cache hits) ===
-    const clientIP = getClientIP(req);
-    const rateLimit = await checkRateLimit(clientIP);
-
-    // Set rate limit headers
-    res.setHeader('X-RateLimit-Limit', MAX_REQUESTS_PER_WINDOW);
-    res.setHeader('X-RateLimit-Remaining', rateLimit.remaining);
-
-    if (!rateLimit.allowed) {
-      return res.status(429).json({
-        error: 'Rate limit exceeded. Please try again later.',
-        retryAfter: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000 / 60) + ' minutes'
-      });
+    // === RATE LIMITING (only for DEEP scan to save API costs) ===
+    if (scanMode === 'deep') {
+      const clientIP = getClientIP(req);
+      const rateLimit = await checkRateLimit(clientIP);
+      res.setHeader('X-RateLimit-Limit', MAX_REQUESTS_PER_WINDOW);
+      res.setHeader('X-RateLimit-Remaining', rateLimit.remaining);
+      if (!rateLimit.allowed) {
+        return res.status(429).json({
+          error: 'Rate limit exceeded. Please try again later.',
+          retryAfter: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000 / 60) + ' minutes'
+        });
+      }
     }
 
     // === CALL GEMINI API ===
     const ai = new GoogleGenAI({ apiKey });
 
     const langInstruction = language === 'zh-TW'
-      ? "Output fields 'bioSummary', 'verdict', 'description', 'details', 'resolutionNote' in Traditional Chinese (繁體中文)."
+      ? "Output all text fields in Traditional Chinese (繁體中文)."
       : "Output all text fields in English.";
 
     const insufficientVerdictText = language === 'zh-TW'
       ? "公開資料不足，無法評估風險"
       : "Insufficient public data to assess risk";
 
-    // Two-phase prompt: Identity Resolution + Reputation Analysis
-    const prompt = `
-      Analyze Crypto KOL: "${inputQuery}".
+    // ============ QUICK SCAN ============
+    if (scanMode === 'quick') {
+      const quickPrompt = `
+        Quick identity check for crypto KOL: "${inputQuery}".
+        ${langInstruction}
+
+        Tasks:
+        1. Identify if this corresponds to a crypto-related person/account.
+        2. Find the most likely Twitter/X handle if possible.
+        3. Suggest up to 3 alternative search queries (romanized names, aliases, common handles).
+        4. List up to 3 candidate Twitter handles that might match.
+
+        Keep output minimal. Do NOT do deep reputation analysis.
+      `;
+
+      const quickSchema = {
+        type: Type.OBJECT,
+        properties: {
+          identity: {
+            type: Type.OBJECT,
+            properties: {
+              input: { type: Type.STRING },
+              resolvedHandle: { type: Type.STRING, nullable: true },
+              displayName: { type: Type.STRING, nullable: true },
+              confidence: { type: Type.NUMBER },
+              resolutionNote: { type: Type.STRING }
+            },
+            required: ["input", "confidence", "resolutionNote"]
+          },
+          dataCoverage: { type: Type.STRING, enum: ["HIGH", "MEDIUM", "LOW", "INSUFFICIENT"] },
+          displayName: { type: Type.STRING },
+          bioSummary: { type: Type.STRING },
+          suggestedQueries: { type: Type.ARRAY, items: { type: Type.STRING } },
+          candidates: { type: Type.ARRAY, items: { type: Type.STRING } }
+        },
+        required: ["identity", "dataCoverage", "displayName", "bioSummary"]
+      };
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: quickPrompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: quickSchema,
+          maxOutputTokens: 600,
+          temperature: 0.3,
+        },
+      });
+
+      const data = JSON.parse(response.text || "{}");
+      if (data.identity) data.identity.input = inputQuery;
+
+      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const sources = groundingChunks
+        .slice(0, 3)
+        .map((c: any) => c.web ? { title: c.web.title, url: c.web.uri } : null)
+        .filter(Boolean);
+
+      const result = {
+        ...data,
+        handle,
+        trustScore: null,
+        totalWins: 0,
+        totalLosses: 0,
+        verdict: insufficientVerdictText,
+        history: [],
+        sources,
+        scanMode: 'quick',
+        lastAnalyzed: new Date().toISOString()
+      };
+
+      setCachedAnalysis(handle, language, 'quick', result);
+      return res.status(200).json({ ...result, source: 'api' });
+    }
+
+    // ============ DEEP SCAN ============
+    const deepPrompt = `
+      Deep analysis of Crypto KOL: "${inputQuery}".
       ${langInstruction}
 
-      PHASE 1 - Identity Resolution:
-      - Determine if "${inputQuery}" corresponds to a crypto-related individual/account.
-      - Try to resolve the most likely Twitter/X handle (if any).
-      - Provide confidence (0-100) for the identity resolution.
-      - If no clear account found, set confidence low and note "unresolved".
+      PHASE 1 - Identity:
+      - Resolve Twitter/X handle and display name.
+      - Confidence 0-100.
 
-      PHASE 2 - Reputation Analysis (ONLY if identity is reasonably confident):
-      - Use ONLY publicly verifiable sources (news, public posts, forums).
-      - Do NOT invent blockchain transactions or unverified claims.
-      - Do NOT treat lack of data as negative evidence.
+      PHASE 2 - Reputation (strict evidence rules):
+      - Use ONLY publicly verifiable sources.
+      - Do NOT invent data or treat lack of data as negative.
+      - Every history event MUST have a valid sourceUrl. Skip events without source.
+      - Max 8 history items, max 280 chars per details field.
+      - verdict: one sentence.
 
-      CRITICAL RULES:
-      - If insufficient public data exists:
-        * Set trustScore to null
-        * Set verdict to: "${insufficientVerdictText}"
-        * Set history to empty array []
-        * Set dataCoverage to "INSUFFICIENT"
-      - Each history event MUST have a valid sourceUrl. If no source URL available, do NOT include that event.
-      - dataCoverage levels:
-        * HIGH: Multiple reliable sources, verified account
-        * MEDIUM: Some sources, partially verified
-        * LOW: Few sources, uncertain verification
-        * INSUFFICIENT: No reliable public data
+      dataCoverage: HIGH (many sources) / MEDIUM / LOW / INSUFFICIENT.
+      If insufficient data: trustScore=null, verdict="${insufficientVerdictText}", history=[].
 
-      Score logic (only when data is sufficient):
-      - High score (80+): Accurate calls, community trust, verified track record.
-      - Low score (<40): Documented paid promos, scams, rug pulls.
+      Score logic: 80+ = trusted, <40 = risky/scammer.
     `;
 
-    const analysisSchema = {
+    const deepSchema = {
       type: Type.OBJECT,
       properties: {
         identity: {
           type: Type.OBJECT,
-          description: "Identity resolution result",
           properties: {
-            input: { type: Type.STRING, description: "Original search input" },
-            resolvedHandle: { type: Type.STRING, description: "Twitter/X handle if found", nullable: true },
-            displayName: { type: Type.STRING, description: "Display name if found", nullable: true },
-            confidence: { type: Type.NUMBER, description: "Confidence 0-100 for identity resolution" },
-            resolutionNote: { type: Type.STRING, description: "Brief note about resolution result" }
+            input: { type: Type.STRING },
+            resolvedHandle: { type: Type.STRING, nullable: true },
+            displayName: { type: Type.STRING, nullable: true },
+            confidence: { type: Type.NUMBER },
+            resolutionNote: { type: Type.STRING }
           },
           required: ["input", "confidence", "resolutionNote"]
         },
-        dataCoverage: {
-          type: Type.STRING,
-          enum: ["HIGH", "MEDIUM", "LOW", "INSUFFICIENT"],
-          description: "Level of available public data"
-        },
-        displayName: { type: Type.STRING, description: "Name of the KOL" },
-        bioSummary: { type: Type.STRING, description: "1-2 sentence summary of their niche" },
-        trustScore: { type: Type.NUMBER, description: "0-100 score, or null if insufficient data", nullable: true },
-        totalWins: { type: Type.NUMBER, description: "Count of successful calls/good reports" },
-        totalLosses: { type: Type.NUMBER, description: "Count of failed calls/scams/controversies" },
-        followersCount: { type: Type.STRING, description: "Approximate follower count (e.g. '100K')" },
-        verdict: { type: Type.STRING, description: "One-sentence verdict" },
+        dataCoverage: { type: Type.STRING, enum: ["HIGH", "MEDIUM", "LOW", "INSUFFICIENT"] },
+        displayName: { type: Type.STRING },
+        bioSummary: { type: Type.STRING },
+        trustScore: { type: Type.NUMBER, nullable: true },
+        totalWins: { type: Type.NUMBER },
+        totalLosses: { type: Type.NUMBER },
+        followersCount: { type: Type.STRING },
+        verdict: { type: Type.STRING },
         history: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
               id: { type: Type.STRING },
-              date: { type: Type.STRING, description: "YYYY-MM-DD or 'Recent'" },
-              description: { type: Type.STRING, description: "Short title of event" },
-              type: {
-                type: Type.STRING,
-                enum: ["PREDICTION_WIN", "PREDICTION_LOSS", "CONTROVERSY", "NEUTRAL_NEWS"]
-              },
-              token: { type: Type.STRING, description: "Token symbol if applicable", nullable: true },
-              sentiment: {
-                type: Type.STRING,
-                enum: ["POSITIVE", "NEGATIVE", "NEUTRAL"]
-              },
-              details: { type: Type.STRING, description: "Explanation of the event" },
-              sourceUrl: { type: Type.STRING, description: "Required URL to evidence source" }
+              date: { type: Type.STRING },
+              description: { type: Type.STRING },
+              type: { type: Type.STRING, enum: ["PREDICTION_WIN", "PREDICTION_LOSS", "CONTROVERSY", "NEUTRAL_NEWS"] },
+              token: { type: Type.STRING, nullable: true },
+              sentiment: { type: Type.STRING, enum: ["POSITIVE", "NEGATIVE", "NEUTRAL"] },
+              details: { type: Type.STRING },
+              sourceUrl: { type: Type.STRING }
             },
             required: ["id", "date", "description", "type", "sentiment", "details", "sourceUrl"]
           }
@@ -332,46 +380,40 @@ export default async function handler(req: any, res: any) {
 
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
-      contents: prompt,
+      contents: deepPrompt,
       config: {
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
-        responseSchema: analysisSchema,
+        responseSchema: deepSchema,
+        maxOutputTokens: 1800,
+        temperature: 0.3,
       },
     });
 
-    const text = response.text;
-    const data = JSON.parse(text || "{}");
+    const data = JSON.parse(response.text || "{}");
+    if (data.identity) data.identity.input = inputQuery;
+
+    // Filter history without sourceUrl and limit to 8
+    if (data.history && Array.isArray(data.history)) {
+      data.history = data.history.filter((e: any) => e.sourceUrl).slice(0, 8);
+    }
 
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const sources = groundingChunks
-      .map((chunk: any) => chunk.web ? { title: chunk.web.title, url: chunk.web.uri } : null)
-      .filter((s: any) => s !== null);
-
-    // Ensure identity.input is set to original query
-    if (data.identity) {
-      data.identity.input = inputQuery;
-    }
-
-    // Filter history events without sourceUrl
-    if (data.history && Array.isArray(data.history)) {
-      data.history = data.history.filter((event: any) => event.sourceUrl);
-    }
+      .slice(0, 5)
+      .map((c: any) => c.web ? { title: c.web.title, url: c.web.uri } : null)
+      .filter(Boolean);
 
     const result = {
       ...data,
       handle,
-      sources: sources,
+      sources,
+      scanMode: 'deep',
       lastAnalyzed: new Date().toISOString()
     };
 
-    // Save to cache (async, don't wait)
-    setCachedAnalysis(handle, language, result);
-
-    return res.status(200).json({
-      ...result,
-      source: 'api'
-    });
+    setCachedAnalysis(handle, language, 'deep', result);
+    return res.status(200).json({ ...result, source: 'api' });
 
   } catch (error: any) {
     console.error("API Error:", error);
