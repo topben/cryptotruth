@@ -5,7 +5,8 @@ import { analyzeKOLHandle, APIError } from './services/geminiService';
 import SearchInput from './components/SearchInput';
 import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
-import { ShieldAlert, TrendingUp, TrendingDown, ExternalLink, Activity, Search, Share2, RefreshCw, Globe } from 'lucide-react';
+import { ShieldAlert, TrendingUp, TrendingDown, ExternalLink, Activity, Search, Share2, Globe } from 'lucide-react';
+// RefreshCw removed - refresh functionality disabled
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 // UI Text dictionary for all static text
@@ -182,11 +183,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRefresh = () => {
-    if (analysis) {
-      handleSearch(analysis.handle, true);
-    }
-  };
+  // DISABLED: Refresh functionality commented out
+  // const handleRefresh = () => {
+  //   if (analysis) {
+  //     handleSearch(analysis.handle, true);
+  //   }
+  // };
 
   const handleShareOnX = () => {
     if (!analysis) return;
@@ -323,15 +325,15 @@ const App: React.FC = () => {
                         {t.results.shareOnX}
                       </button>
 
-                      {/* Refresh Button */}
-                      <button
+                      {/* DISABLED: Refresh Button commented out */}
+                      {/* <button
                         onClick={handleRefresh}
                         className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-2 px-4 rounded-xl border border-gray-700 transition-all duration-300 flex items-center justify-center gap-2 group"
                         title={t.results.refreshAnalysis}
                       >
                         <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
                         {t.results.refreshAnalysis}
-                      </button>
+                      </button> */}
                     </div>
 
                     {/* Cache/Live Badge */}
@@ -341,13 +343,14 @@ const App: React.FC = () => {
                           <span className="text-sm text-blue-400 font-medium">
                             {t.results.cachedResult}
                           </span>
-                          <button
+                          {/* DISABLED: Force Refresh button commented out */}
+                          {/* <button
                             onClick={handleRefresh}
                             className="text-xs bg-blue-800 hover:bg-blue-700 text-blue-200 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"
                           >
                             <RefreshCw className="w-3 h-3" />
                             {t.results.forceRefresh}
-                          </button>
+                          </button> */}
                         </div>
                         {analysis.cachedAt && (
                           <p className="text-xs text-blue-500 mt-1">
