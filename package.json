@@ -1,8 +1,19 @@
 {
   "name": "cryptotruth",
-  "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "AI-powered due diligence platform for analyzing cryptocurrency KOLs and influencers",
   "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "cryptocurrency",
+    "kol",
+    "influencer",
+    "trust-score",
+    "gemini",
+    "ai",
+    "react",
+    "vite"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
