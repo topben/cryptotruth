@@ -19,7 +19,7 @@ AI-powered due diligence platform for analyzing cryptocurrency Key Opinion Leade
 - **AI**: Google Gemini 2.0 Flash with web search capabilities
 - **Backend**: Vercel Serverless Functions
 - **Caching**: Vercel Blob Storage
-- **i18n**: i18next with browser language detection
+- **i18n**: Built-in language support (English, Traditional Chinese)
 
 ## Getting Started
 
@@ -88,16 +88,9 @@ cryptotruth/
 │   └── analyze.ts        # Serverless API endpoint
 ├── components/
 │   ├── HistoryTimeline.tsx
-│   ├── LanguageSelector.tsx
 │   ├── SearchInput.tsx
 │   └── TrustMeter.tsx
-├── i18n/
-│   ├── index.ts
-│   └── locales/
-│       ├── en.json
-│       └── zh-TW.json
 ├── services/
-│   ├── cacheService.ts
 │   └── geminiService.ts
 ├── public/
 ├── App.tsx
