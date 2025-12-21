@@ -47,8 +47,7 @@ npm run dev
 ```
 api/           # Serverless API endpoints
 components/    # React components
-i18n/          # Internationalization
-services/      # API and cache services
+services/      # API services
 public/        # Static assets
 ```
 
