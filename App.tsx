@@ -317,7 +317,7 @@ const App: React.FC = () => {
 
                 {/* Trust Meter */}
                 <div className="lg:col-span-3">
-                    <TrustMeter score={analysis.trustScore} language={language} />
+                    <TrustMeter score={analysis.trustScore ?? 0} language={language} />
                     {/* Share Button */}
                     <button
                       onClick={handleShareOnX}

@@ -291,6 +291,8 @@ export default async function handler(req: any, res: any) {
 
       IMPORTANT: Do not deep dive into raw blockchain transaction pages. Focus on reputation and track record.
 
+      MANDATORY: You MUST populate the credibilityStrengths and riskFactors arrays with at least 3 points each based on your search findings. Do not leave them empty. If you cannot find specific evidence, provide general observations based on the KOL's public presence and content style.
+
       IMPORTANT: Return the analysis as a raw, parsable JSON object ONLY. Do not use markdown code blocks (e.g., no \`\`\`json), no backticks, and no introductory text.
     `;
 
@@ -357,7 +359,42 @@ export default async function handler(req: any, res: any) {
     });
 
     const text = response.text;
-    const data = JSON.parse(text || "{}");
+
+    // Strip markdown code blocks if present (Gemini sometimes wraps JSON in ```json ... ```)
+    const cleanText = (text || "{}").replace(/^\s*```(?:json)?\s*|\s*```\s*$/gm, '').trim();
+
+    let data: any;
+    try {
+      data = JSON.parse(cleanText);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      console.error('Raw response text:', text?.substring(0, 500));
+
+      // Return a standardized 'insufficient data' fallback so the UI doesn't break
+      const fallbackData = {
+        displayName: rawHandle,
+        bioSummary: language === 'zh-TW'
+          ? '無法解析 AI 回應。請稍後再試。'
+          : 'Unable to parse AI response. Please try again later.',
+        trustScore: 50,
+        verdict: language === 'zh-TW'
+          ? '分析暫時無法使用'
+          : 'Analysis temporarily unavailable',
+        credibilityStrengths: [],
+        riskFactors: [
+          language === 'zh-TW'
+            ? '無法完成完整評估 - AI 回應格式錯誤'
+            : 'Unable to complete full assessment - AI response format error'
+        ],
+        history: [],
+        handle: sanitizeHandle(rawHandle) || rawHandle,
+        lastAnalyzed: new Date().toISOString(),
+        groundedSearch: false,
+        source: 'api'
+      };
+
+      return res.status(200).json(fallbackData);
+    }
 
     // Extract Grounding Metadata (Citations/Sources)
     const groundingMetadata = response.candidates?.[0]?.groundingMetadata;

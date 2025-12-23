@@ -28,6 +28,11 @@ const TRANSLATIONS = {
 const TrustMeter: React.FC<TrustMeterProps> = ({ score, language }) => {
   const t = TRANSLATIONS[language];
 
+  // Ensure score is a valid number between 0 and 100
+  const safeScore = typeof score === 'number' && !isNaN(score)
+    ? Math.max(0, Math.min(100, score))
+    : 0;
+
   // Color calculation based on score
   const getColor = (val: number) => {
     if (val >= 80) return 'text-crypto-success border-crypto-success shadow-crypto-success/50';
@@ -43,12 +48,14 @@ const TrustMeter: React.FC<TrustMeterProps> = ({ score, language }) => {
     return t.scammer;
   };
 
-  const colorClass = getColor(score);
+  const colorClass = getColor(safeScore);
 
   // Increased radius to fill the 160px box better (was 45)
   const radius = 64;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (score / 100) * circumference;
+  // For score of 0, show a minimal arc instead of nothing for visual feedback
+  const progressRatio = safeScore === 0 ? 0.01 : safeScore / 100;
+  const strokeDashoffset = circumference - progressRatio * circumference;
 
   return (
     <div className="flex flex-col items-center justify-center p-6 bg-crypto-card rounded-2xl shadow-xl border border-gray-800 h-full w-full">
@@ -80,13 +87,13 @@ const TrustMeter: React.FC<TrustMeterProps> = ({ score, language }) => {
         </svg>
         <div className="flex flex-col items-center z-10">
             <span className={`text-5xl font-display font-bold ${colorClass.split(' ')[0]} drop-shadow-sm`}>
-                {score}
+                {safeScore}
             </span>
             <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-semibold">{t.label}</span>
         </div>
       </div>
       <div className={`mt-6 px-6 py-2 rounded-full border ${colorClass} bg-opacity-10 font-bold tracking-widest text-sm shadow-lg`}>
-        {getLabel(score)}
+        {getLabel(safeScore)}
       </div>
     </div>
   );
