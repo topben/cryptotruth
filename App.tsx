@@ -5,7 +5,7 @@ import { analyzeKOLHandle, APIError } from './services/geminiService';
 import SearchInput from './components/SearchInput';
 import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
-import { ShieldAlert, Activity, Search, Share2, Globe, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ShieldAlert, Activity, Search, Share2, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink } from 'lucide-react';
 
 // UI Text dictionary for all static text
 const UI_TEXT = {
@@ -55,6 +55,9 @@ const UI_TEXT = {
     },
     search: {
       newSearch: 'New Search'
+    },
+    guidance: {
+      advancedInfo: 'Looking for deeper insights? Ask Gemini for a full investigative analysis based on this audit.'
     }
   },
   'zh-TW': {
@@ -103,6 +106,9 @@ const UI_TEXT = {
     },
     search: {
       newSearch: '新搜尋'
+    },
+    guidance: {
+      advancedInfo: '想要更深入的分析？請 Gemini 根據這份審核結果提供完整的調查報告。'
     }
   }
 };
@@ -333,6 +339,20 @@ const App: React.FC = () => {
                         {analysis.verdict}
                       </p>
                     )}
+
+                    {/* Guidance Banner - Link to Gemini */}
+                    <a
+                      href="https://gemini.google.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-4 flex items-start gap-3 p-3 bg-crypto-accent/5 border border-crypto-accent/20 rounded-lg hover:bg-crypto-accent/10 transition-colors group cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors">
+                        {t.guidance.advancedInfo}
+                      </span>
+                      <ExternalLink className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+                    </a>
                 </div>
             </div>
 
