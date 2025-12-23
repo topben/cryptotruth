@@ -8,6 +8,15 @@ const MAX_REQUESTS_PER_WINDOW = 10; // Max 10 API calls per IP per hour
 const MAX_HANDLE_LENGTH = 50;
 const ALLOWED_LANGUAGES = ['en', 'zh-TW'];
 
+// Inflation Maps for minified schema
+const HISTORY_TYPE_MAP: Record<number, string> = {
+  0: "PREDICTION_WIN", 1: "PREDICTION_LOSS", 2: "CONTROVERSY",
+  3: "NEUTRAL_NEWS", 4: "SCAM_ALLEGATION", 5: "INVESTIGATION"
+};
+const SENTIMENT_MAP: Record<number, string> = { 0: "POSITIVE", 1: "NEGATIVE", 2: "NEUTRAL" };
+const ENGAGEMENT_MAP: Record<number, string> = { 0: "ORGANIC", 1: "MIXED", 2: "SUSPICIOUS", 3: "BOT_HEAVY" };
+const IDENTITY_MAP: Record<number, string> = { 0: "UNKNOWN_ENTITY", 1: "VERIFIED_INFLUENCER", 2: "IMPERSONATOR", 3: "OFFICIAL_PROJECT" };
+
 /**
  * Sanitize handle input - remove @ prefix and validate format
  */
@@ -241,106 +250,46 @@ export default async function handler(req: any, res: any) {
     // === CALL GEMINI API ===
     const ai = new GoogleGenAI({ apiKey });
 
-    const langInstruction = language === 'zh-TW'
-      ? "Output fields 'bioSummary', 'verdict', 'description', 'details' in Traditional Chinese (繁體中文)."
-      : "Output all text fields in English.";
-
-    // Optimized prompt with specific reputation sources
+    // Optimized prompt - minified for token efficiency
     const prompt = `
-      Analyze Crypto KOL: "${handle}".
-      ${langInstruction}
-
-      REQUIRED SEARCHES (use exact queries):
-      1. "ZachXBT ${handle}" - Find any investigations, exposés, or mentions by crypto detective ZachXBT
-      2. "Coffeezilla ${handle}" - Find any coverage or investigations by YouTube investigator Coffeezilla
-      3. "Reddit r/CryptoCurrency ${handle}" - Find community discussions, warnings, or praise on Reddit
-      4. "${handle} crypto scam" and "${handle} rug pull" - Find scam allegations
-      5. "${handle} paid promotion" and "${handle} sponsored" - Find undisclosed paid content
-
-      ANALYSIS TASKS:
-      1. CREDIBILITY STRENGTHS - Identify positive indicators such as:
-         - Mainstream media recognition or citations
-         - Transparent methodology (shares reasoning, admits uncertainty)
-         - History of self-correction when wrong
-         - Long-term consistent presence in crypto space
-         - Educational content that helps newcomers
-         - Verified credentials or professional background
-         - Community trust and positive testimonials
-
-      2. RISK FACTORS - Identify warning signs such as:
-         - Sponsorship controversies or undisclosed paid promotions
-         - Legal risks, investigations, or regulatory issues
-         - Aggressive narratives or fear-mongering tactics
-         - Association with failed projects or rug pulls
-         - Pump-and-dump behavior patterns
-         - Fake engagement or bot followers
-         - History of deleting failed predictions
-
-      EVIDENCE PRIORITY:
-      - ZachXBT threads carry high weight (on-chain investigator)
-      - Coffeezilla videos carry high weight (deep-dive investigations)
-      - Reddit consensus with evidence carries medium weight
-      - Multiple independent sources confirming same issue = high confidence
-
-      SCORE LOGIC (based on qualitative factors):
-      - 80-100: Strong credibility strengths (mainstream recognition, transparent methodology, self-correction history), minimal or no risk factors
-      - 60-79: Some credibility strengths present, minor risk factors, generally positive community sentiment
-      - 40-59: Mixed profile - some strengths offset by notable risk factors, community opinion divided
-      - 20-39: Few credibility strengths, multiple significant risk factors (sponsorship issues, aggressive tactics)
-      - 0-19: No credibility strengths, severe risk factors (confirmed scams, legal issues, ZachXBT/Coffeezilla exposed)
-
-      IMPORTANT: Do not deep dive into raw blockchain transaction pages. Focus on reputation and track record.
+    TASK: Background check Crypto KOL "${handle}".
+    LANG: ${language === 'zh-TW' ? 'Traditional Chinese' : 'English'}.
+    STEPS:
+    1. ID: Verify if user is real/notable. If unknown/random, set s=0. If verified influencer, s=1. If impersonator, s=2.
+    2. SEARCH: "ZachXBT ${handle}", "Coffeezilla ${handle}", "Reddit r/CryptoCurrency ${handle}", "${handle} scam", "${handle} rug pull", "${handle} paid promo".
+    3. SCORE: 0(Scam)-100(Trusted). <20: Fraud. 20-40: Shiller. 40-60: Unknown. >80: Leader.
+    OUTPUT: JSON only.
     `;
 
+    // Minified schema for token efficiency
     const analysisSchema = {
       type: Type.OBJECT,
       properties: {
-        displayName: { type: Type.STRING, description: "Name of the KOL" },
-        bioSummary: { type: Type.STRING, description: "1-2 sentence summary of their niche" },
-        trustScore: { type: Type.NUMBER, description: "0-100 score based on qualitative credibility strengths vs risk factors" },
-        followersCount: { type: Type.STRING, description: "Approximate follower count (e.g. '100K')" },
-        verdict: { type: Type.STRING, description: "One-sentence verdict (e.g. 'High Risk Scammer')" },
-        engagementQuality: {
-          type: Type.STRING,
-          enum: ["ORGANIC", "MIXED", "SUSPICIOUS", "BOT_HEAVY"],
-          description: "Assessment of follower/engagement authenticity based on search evidence",
-          nullable: true
-        },
-        credibilityStrengths: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "List of positive credibility indicators (e.g. mainstream recognition, transparent methodology, self-correction history)"
-        },
-        riskFactors: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "List of identified risk factors (e.g. sponsorship controversies, legal risks, aggressive narratives)"
-        },
-        history: {
+        d: { type: Type.STRING, description: "Display Name" },
+        b: { type: Type.STRING, description: "Bio Summary (max 15 words)" },
+        s: { type: Type.NUMBER, description: "Status: 0=Unknown, 1=Verified, 2=Impersonator, 3=Official" },
+        ts: { type: Type.NUMBER, description: "Trust Score (0-100)" },
+        v: { type: Type.STRING, description: "Verdict (Short)" },
+        eq: { type: Type.NUMBER, description: "Engagement: 0=Org, 1=Mix, 2=Sus, 3=Bot", nullable: true },
+        c: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Credibility Strengths" },
+        r: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Risk Factors" },
+        h: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
-              id: { type: Type.STRING },
-              date: { type: Type.STRING, description: "YYYY-MM-DD or 'Recent'" },
-              description: { type: Type.STRING, description: "Short title of event" },
-              type: {
-                type: Type.STRING,
-                enum: ["PREDICTION_WIN", "PREDICTION_LOSS", "CONTROVERSY", "NEUTRAL_NEWS", "SCAM_ALLEGATION", "INVESTIGATION"]
-              },
-              token: { type: Type.STRING, description: "Token symbol if applicable", nullable: true },
-              sentiment: {
-                type: Type.STRING,
-                enum: ["POSITIVE", "NEGATIVE", "NEUTRAL"]
-              },
-              details: { type: Type.STRING, description: "Explanation of the event" },
-              sourceUrl: { type: Type.STRING, description: "URL to evidence source", nullable: true }
+              dt: { type: Type.STRING, description: "Date (YYYY-MM-DD or 'Recent')" },
+              e: { type: Type.STRING, description: "Event description" },
+              t: { type: Type.NUMBER, description: "Type: 0=Win,1=Loss,2=Controv,3=News,4=Scam,5=Invest" },
+              tk: { type: Type.STRING, description: "Token symbol", nullable: true },
+              s: { type: Type.NUMBER, description: "Sentiment: 0=Pos,1=Neg,2=Neu" },
+              x: { type: Type.STRING, description: "Details" }
             },
-            required: ["id", "date", "description", "type", "sentiment", "details"]
+            required: ["dt", "e", "t", "s", "x"]
           }
         }
       },
-      required: ["displayName", "bioSummary", "trustScore", "verdict", "credibilityStrengths", "riskFactors", "history"]
+      required: ["d", "b", "s", "ts", "v", "c", "r", "h"]
     };
 
     const response = await ai.models.generateContent({
@@ -354,7 +303,7 @@ export default async function handler(req: any, res: any) {
     });
 
     const text = response.text;
-    const data = JSON.parse(text || "{}");
+    const minData = JSON.parse(text || "{}");
 
     // Extract Grounding Metadata (Citations/Sources)
     const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
@@ -366,44 +315,82 @@ export default async function handler(req: any, res: any) {
     // Extract search queries used for grounding (if available)
     const searchQueries = groundingMetadata?.webSearchQueries || [];
 
+    // === INFLATE MINIFIED DATA TO FULL SCHEMA ===
+    // Convert minified API response back to full UI-compatible format
+    const fullData: any = {
+      handle,
+      displayName: minData.d || handle,
+      bioSummary: minData.b || "No bio available",
+      identityStatus: IDENTITY_MAP[minData.s] || "UNKNOWN_ENTITY",
+      trustScore: minData.ts ?? 50,
+      verdict: minData.v || "Insufficient data",
+      engagementQuality: ENGAGEMENT_MAP[minData.eq] || "MIXED",
+      credibilityStrengths: minData.c || [],
+      riskFactors: minData.r || [],
+      history: (minData.h || []).map((item: any, index: number) => ({
+        id: `evt-${index}`,
+        date: item.dt,
+        description: item.e,
+        type: HISTORY_TYPE_MAP[item.t] || "NEUTRAL_NEWS",
+        token: item.tk || undefined,
+        sentiment: SENTIMENT_MAP[item.s] || "NEUTRAL",
+        details: item.x,
+        sourceUrl: undefined
+      })),
+      // UI flow compatibility fields
+      searchQueries: searchQueries.length > 0 ? searchQueries : undefined,
+      groundedSearch: (groundingChunks?.length || 0) > 0,
+      lastAnalyzed: new Date().toISOString(),
+      followersCount: undefined // Explicitly undefined to respect types
+    };
+
+    // === LOW VISIBILITY PENALTY LOGIC ===
+    // If identity status is UNKNOWN_ENTITY (s=0), cap trust score and add risk factor
+    if (minData.s === 0) {
+      fullData.trustScore = Math.min(fullData.trustScore, 40);
+      if (fullData.riskFactors.length === 0) {
+        fullData.riskFactors.push(
+          language === 'zh-TW' ? "缺乏公眾記錄" : "Low public visibility"
+        );
+      }
+    }
+
     // === LOW-EVIDENCE FALLBACK NORMALIZATION ===
     // If Gemini returned minimal data and there are no grounded sources,
     // force a standard "insufficient information" response for predictability.
-    const normalized: any = { ...data };
-
     if (
       sources.length === 0 &&
-      (!Array.isArray(normalized.history) || normalized.history.length === 0)
+      (!Array.isArray(fullData.history) || fullData.history.length === 0)
     ) {
-      normalized.trustScore = 50;
-      normalized.credibilityStrengths = [];
-      normalized.riskFactors = [
+      fullData.trustScore = 50;
+      fullData.credibilityStrengths = [];
+      fullData.riskFactors = [
         language === 'zh-TW'
           ? '缺乏足夠公開資訊進行完整評估'
           : 'Insufficient public information for complete assessment'
       ];
 
       // If model didn't give a meaningful bio, provide a safe default
-      if (!normalized.bioSummary || !normalized.bioSummary.trim()) {
-        normalized.bioSummary =
+      if (!fullData.bioSummary || !fullData.bioSummary.trim() || fullData.bioSummary === "No bio available") {
+        fullData.bioSummary =
           language === 'zh-TW'
-            ? `目前缺乏足夠的公開資訊，無法為 ${normalized.displayName || handle} 建立詳細的加密貨幣相關介紹。`
-            : `There is currently not enough public information to build a detailed crypto-related bio for ${normalized.displayName || handle}.`;
+            ? `目前缺乏足夠的公開資訊，無法為 ${fullData.displayName || handle} 建立詳細的加密貨幣相關介紹。`
+            : `There is currently not enough public information to build a detailed crypto-related bio for ${fullData.displayName || handle}.`;
       }
 
-      normalized.verdict =
+      fullData.verdict =
         language === 'zh-TW'
           ? '需要更多公開資訊才能進行風險評估。'
           : 'Needs more public information before a fair risk assessment is possible.';
 
-      normalized.history = [
+      fullData.history = [
         {
           id: 'insufficient-data',
           date: 'Recent',
           description:
             language === 'zh-TW'
-              ? `缺乏足夠的公開證據評估 ${normalized.displayName || handle} 的加密貨幣相關聲譽`
-              : `Insufficient public evidence to evaluate ${normalized.displayName || handle}'s crypto-related reputation`,
+              ? `缺乏足夠的公開證據評估 ${fullData.displayName || handle} 的加密貨幣相關聲譽`
+              : `Insufficient public evidence to evaluate ${fullData.displayName || handle}'s crypto-related reputation`,
           type: 'NEUTRAL_NEWS',
           token: undefined,
           sentiment: 'NEUTRAL',
@@ -416,20 +403,11 @@ export default async function handler(req: any, res: any) {
       ];
     }
 
-    const result = {
-      ...normalized,
-      handle,
-      // Search queries used by Google Search grounding
-      searchQueries: searchQueries.length > 0 ? searchQueries : undefined,
-      lastAnalyzed: new Date().toISOString(),
-      groundedSearch: sources.length > 0 // Indicates if Google Search grounding was used
-    };
-
     // Save to cache (async, don't wait)
-    setCachedAnalysis(handle, language, result);
+    setCachedAnalysis(handle, language, fullData);
 
     return res.status(200).json({
-      ...result,
+      ...fullData,
       source: 'api'
     });
 
