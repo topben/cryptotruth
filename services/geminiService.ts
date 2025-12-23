@@ -9,8 +9,12 @@ export class APIError extends Error {
   }
 }
 
-export const analyzeKOLHandle = async (handle: string, language: Language = 'en', forceRefresh: boolean = false): Promise<KOLAnalysis> => {
-  const response = await fetch('/api/analyze', {
+export const analyzeKOLHandle = async (
+  handle: string,
+  language: Language = 'en',
+  forceRefresh: boolean = false
+): Promise<KOLAnalysis> => {
+  const response = await fetch('/api/analyze-enhanced', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
