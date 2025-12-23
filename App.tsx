@@ -51,7 +51,7 @@ const UI_TEXT = {
       trackRecord: 'Track Record'
     },
     share: {
-      tweetTemplate: 'I just checked @{handle} on CryptoTruth!\n\n📊 {verdict}\n🔍 Trust Score: {score}/100\n\nCheck any crypto KOL yourself:'
+      tweetTemplate: 'I just checked @{handle} on CryptoTruth!\n\n📊 {verdict}\n🔍 Trust Score: {score}/100\n\nCheck any crypto KOL yourself:\nhttps://cryptotruth.news'
     },
     search: {
       newSearch: 'New Search'
@@ -99,7 +99,7 @@ const UI_TEXT = {
       trackRecord: '歷史紀錄'
     },
     share: {
-      tweetTemplate: '我剛在 CryptoTruth 查了 @{handle}！\n\n📊 {verdict}\n🔍 信任分數：{score}/100\n\n自己來查查任何加密貨幣 KOL：'
+      tweetTemplate: '我剛在 CryptoTruth 查了 @{handle}！\n\n📊 {verdict}\n🔍 信任分數：{score}/100\n\n自己來查查任何加密貨幣 KOL：\nhttps://cryptotruth.news'
     },
     search: {
       newSearch: '新搜尋'
