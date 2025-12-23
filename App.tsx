@@ -5,9 +5,7 @@ import { analyzeKOLHandle, APIError } from './services/geminiService';
 import SearchInput from './components/SearchInput';
 import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
-import { ShieldAlert, TrendingUp, TrendingDown, ExternalLink, Activity, Search, Share2, Globe } from 'lucide-react';
-// RefreshCw removed - refresh functionality disabled
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ShieldAlert, Activity, Search, Share2, Globe, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 // UI Text dictionary for all static text
 const UI_TEXT = {
@@ -37,26 +35,23 @@ const UI_TEXT = {
       defaultMessage: 'An unexpected error occurred. Please try again.'
     },
     common: {
-      unknown: 'Unknown',
-      followers: 'Followers'
+      unknown: 'Unknown'
     },
     results: {
-      goodReports: 'Good Reports',
-      negativeFindings: 'Negative Findings',
       shareOnX: 'Share on X',
-      refreshAnalysis: 'Refresh Analysis',
       cachedAgo: '📦 Cached {time} ago',
       cachedResult: '📦 Cached Result',
       liveAnalysis: '🟢 Live Analysis',
-      forceRefresh: 'Force Refresh',
-      verdict: 'AI Verdict',
-      reportRatio: 'Report Ratio',
-      evidenceSources: 'Evidence Sources',
-      noSources: 'No sources found',
+      executiveSummary: 'Executive Summary',
+      detailedAnalysis: 'Detailed Analysis',
+      credibilityFactors: 'Credibility Factors',
+      risksAndCriticisms: 'Risks & Criticisms',
+      noStrengths: 'No specific credibility factors identified',
+      noRisks: 'No specific risk factors identified',
       trackRecord: 'Track Record'
     },
     share: {
-      tweetTemplate: 'I just checked @{handle} on CryptoTruth!\n\n📊 {verdict}\n✅ Good Reports: {wins}\n❌ Negative Findings: {losses}\n\nCheck any crypto KOL yourself:'
+      tweetTemplate: 'I just checked @{handle} on CryptoTruth!\n\n📊 {verdict}\n🔍 Trust Score: {score}/100\n\nCheck any crypto KOL yourself:'
     },
     search: {
       newSearch: 'New Search'
@@ -88,26 +83,23 @@ const UI_TEXT = {
       defaultMessage: '發生未預期的錯誤。請重試。'
     },
     common: {
-      unknown: '未知',
-      followers: '追蹤者'
+      unknown: '未知'
     },
     results: {
-      goodReports: '正面報導',
-      negativeFindings: '負面發現',
       shareOnX: '分享到 X',
-      refreshAnalysis: '重新分析',
       cachedAgo: '📦 {time} 前快取',
       cachedResult: '📦 快取結果',
       liveAnalysis: '🟢 即時分析',
-      forceRefresh: '強制更新',
-      verdict: 'AI 評斷',
-      reportRatio: '報導比例',
-      evidenceSources: '證據來源',
-      noSources: '未找到來源',
+      executiveSummary: '總結摘要',
+      detailedAnalysis: '詳細分析',
+      credibilityFactors: '可信度因素',
+      risksAndCriticisms: '風險與批評',
+      noStrengths: '未識別出特定的可信度因素',
+      noRisks: '未識別出特定的風險因素',
       trackRecord: '歷史紀錄'
     },
     share: {
-      tweetTemplate: '我剛在 CryptoTruth 查了 @{handle}！\n\n📊 {verdict}\n✅ 正面報導：{wins}\n❌ 負面發現：{losses}\n\n自己來查查任何加密貨幣 KOL：'
+      tweetTemplate: '我剛在 CryptoTruth 查了 @{handle}！\n\n📊 {verdict}\n🔍 信任分數：{score}/100\n\n自己來查查任何加密貨幣 KOL：'
     },
     search: {
       newSearch: '新搜尋'
@@ -197,8 +189,7 @@ const App: React.FC = () => {
     const tweetText = `⚠️ ${t.share.tweetTemplate
       .replace('{handle}', analysis.handle)
       .replace('{verdict}', verdict)
-      .replace('{wins}', String(analysis.totalWins))
-      .replace('{losses}', String(analysis.totalLosses))} 👇`;
+      .replace('{score}', String(analysis.trustScore))} 👇`;
 
     const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
     window.open(twitterUrl, '_blank', 'noopener,noreferrer');
@@ -276,174 +267,128 @@ const App: React.FC = () => {
         {analysis && loadingState === 'COMPLETED' && (
           <div className="animate-fade-in-up">
 
-            {/* Top Profile Card */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-8">
+            {/* Top Section: Profile + Trust Meter + Executive Summary */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
                 {/* Profile Info */}
-                <div className="md:col-span-8 bg-crypto-card p-8 rounded-2xl border border-gray-800 shadow-2xl relative overflow-hidden">
+                <div className="lg:col-span-5 bg-crypto-card p-6 rounded-2xl border border-gray-800 shadow-2xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Activity size={100} />
+                        <Activity size={80} />
                     </div>
 
-                    <div className="flex flex-col md:flex-row gap-6 items-start">
-                        <div className="flex-1">
-                            <h2 className="text-3xl font-bold text-white mb-1">@{analysis.handle}</h2>
-                            <p className="text-crypto-muted font-mono text-sm mb-4">{analysis.displayName} • {analysis.followersCount || t.common.unknown} {t.common.followers}</p>
-                            <p className="text-gray-300 leading-relaxed text-lg mb-6">
-                                {analysis.bioSummary}
-                            </p>
+                    <h2 className="text-2xl font-bold text-white mb-1">@{analysis.handle}</h2>
+                    <p className="text-crypto-muted font-mono text-sm mb-4">{analysis.displayName}</p>
+                    <p className="text-gray-300 leading-relaxed">
+                        {analysis.bioSummary}
+                    </p>
 
-                            <div className="flex gap-4">
-                                <div className="bg-gray-900/50 px-4 py-2 rounded-lg border border-gray-700">
-                                    <span className="block text-xs text-gray-500 uppercase">{t.results.goodReports}</span>
-                                    <span className="text-xl font-bold text-crypto-success flex items-center gap-1">
-                                        <TrendingUp size={16} /> {analysis.totalWins}
-                                    </span>
-                                </div>
-                                <div className="bg-gray-900/50 px-4 py-2 rounded-lg border border-gray-700">
-                                    <span className="block text-xs text-gray-500 uppercase">{t.results.negativeFindings}</span>
-                                    <span className="text-xl font-bold text-crypto-danger flex items-center gap-1">
-                                        <TrendingDown size={16} /> {analysis.totalLosses}
-                                    </span>
-                                </div>
-                            </div>
+                    {/* Cache/Live Badge */}
+                    <div className="mt-4">
+                      {analysis.source === 'cache' ? (
+                        <div className="bg-blue-900/20 p-2 rounded-lg border border-blue-800 inline-block">
+                          <span className="text-xs text-blue-400 font-medium">
+                            {t.results.cachedResult}
+                          </span>
+                          {analysis.cachedAt && (
+                            <span className="text-xs text-blue-500 ml-2">
+                              {(() => {
+                                const ageMs = Date.now() - analysis.cachedAt;
+                                const ageMinutes = Math.round(ageMs / 1000 / 60);
+                                const timeDisplay = ageMinutes < 60 ? `${ageMinutes}m` : `${Math.round(ageMinutes / 60)}h`;
+                                return t.results.cachedAgo.replace('{time}', timeDisplay);
+                              })()}
+                            </span>
+                          )}
                         </div>
+                      ) : analysis.source === 'api' ? (
+                        <div className="bg-green-900/20 p-2 rounded-lg border border-green-800 inline-block">
+                          <span className="text-xs text-green-400 font-medium">
+                            {t.results.liveAnalysis}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                 </div>
 
                 {/* Trust Meter */}
-                <div className="md:col-span-4 flex flex-col gap-4">
+                <div className="lg:col-span-3">
                     <TrustMeter score={analysis.trustScore} language={language} />
+                    {/* Share Button */}
+                    <button
+                      onClick={handleShareOnX}
+                      className="w-full mt-4 bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-500 hover:to-crypto-accent text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group"
+                    >
+                      <Share2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                      {t.results.shareOnX}
+                    </button>
+                </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex flex-col gap-2">
-                      {/* Share on X Button */}
-                      <button
-                        onClick={handleShareOnX}
-                        className="bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-500 hover:to-crypto-accent text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group"
-                      >
-                        <Share2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                        {t.results.shareOnX}
-                      </button>
-
-                      {/* DISABLED: Refresh Button commented out */}
-                      {/* <button
-                        onClick={handleRefresh}
-                        className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium py-2 px-4 rounded-xl border border-gray-700 transition-all duration-300 flex items-center justify-center gap-2 group"
-                        title={t.results.refreshAnalysis}
-                      >
-                        <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-                        {t.results.refreshAnalysis}
-                      </button> */}
-                    </div>
-
-                    {/* Cache/Live Badge */}
-                    {analysis.source === 'cache' ? (
-                      <div className="bg-blue-900/20 p-3 rounded-xl border border-blue-800">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-sm text-blue-400 font-medium">
-                            {t.results.cachedResult}
-                          </span>
-                          {/* DISABLED: Force Refresh button commented out */}
-                          {/* <button
-                            onClick={handleRefresh}
-                            className="text-xs bg-blue-800 hover:bg-blue-700 text-blue-200 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"
-                          >
-                            <RefreshCw className="w-3 h-3" />
-                            {t.results.forceRefresh}
-                          </button> */}
-                        </div>
-                        {analysis.cachedAt && (
-                          <p className="text-xs text-blue-500 mt-1">
-                            {(() => {
-                              const ageMs = Date.now() - analysis.cachedAt;
-                              const ageMinutes = Math.round(ageMs / 1000 / 60);
-                              const timeDisplay = ageMinutes < 60 ? `${ageMinutes}m` : `${Math.round(ageMinutes / 60)}h`;
-                              return t.results.cachedAgo.replace('{time}', timeDisplay);
-                            })()}
-                          </p>
-                        )}
-                      </div>
-                    ) : analysis.source === 'api' ? (
-                      <div className="bg-green-900/20 p-3 rounded-xl border border-green-800 text-center">
-                        <span className="text-sm text-green-400 font-medium">
-                          {t.results.liveAnalysis}
-                        </span>
-                      </div>
-                    ) : null}
-
-                    {/* Verdict Display */}
+                {/* Executive Summary */}
+                <div className="lg:col-span-4 bg-gradient-to-br from-gray-900 to-crypto-card p-6 rounded-2xl border border-gray-700 shadow-2xl">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <ShieldAlert className="w-5 h-5 text-crypto-accent" />
+                        {t.results.executiveSummary}
+                    </h3>
                     {analysis.verdict && (
-                      <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800">
-                        <h4 className="text-xs text-gray-500 uppercase mb-2">{t.results.verdict}</h4>
-                        <p className="text-white font-medium leading-relaxed">{analysis.verdict}</p>
-                      </div>
+                      <p className="text-gray-200 leading-relaxed text-lg font-medium">
+                        {analysis.verdict}
+                      </p>
                     )}
                 </div>
             </div>
 
-            {/* Charts & Timeline */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Left Column: Stats */}
-                <div className="lg:col-span-1 space-y-6">
+            {/* Detailed Analysis Section: Two Columns */}
+            <div className="mb-8">
+                <h3 className="text-xl font-bold text-white mb-6">{t.results.detailedAnalysis}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left Column: Credibility Factors */}
                     <div className="bg-crypto-card p-6 rounded-2xl border border-gray-800">
-                        <h3 className="text-lg font-bold text-white mb-6">{t.results.reportRatio}</h3>
-                        <div className="h-64 w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={[
-                                    { name: t.results.goodReports, value: analysis.totalWins, color: '#2ecc71' },
-                                    { name: t.results.negativeFindings, value: analysis.totalLosses, color: '#e74c3c' }
-                                ]}>
-                                    <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
-                                    <YAxis hide />
-                                    <Tooltip
-                                        cursor={{fill: 'transparent'}}
-                                        contentStyle={{ backgroundColor: '#1F2833', borderColor: '#374151', color: '#fff' }}
-                                    />
-                                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                                        {
-                                          [{ name: t.results.goodReports, color: '#2ecc71' }, { name: t.results.negativeFindings, color: '#e74c3c' }].map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                          ))
-                                        }
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
+                        <h4 className="text-lg font-semibold text-crypto-success mb-4 flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5" />
+                            {t.results.credibilityFactors}
+                        </h4>
+                        <ul className="space-y-3">
+                            {analysis.credibilityStrengths && analysis.credibilityStrengths.length > 0 ? (
+                              analysis.credibilityStrengths.map((strength, idx) => (
+                                <li key={idx} className="flex items-start gap-3 text-gray-300">
+                                    <CheckCircle2 className="w-4 h-4 text-crypto-success mt-1 flex-shrink-0" />
+                                    <span>{strength}</span>
+                                </li>
+                              ))
+                            ) : (
+                              <li className="text-gray-500 italic">{t.results.noStrengths}</li>
+                            )}
+                        </ul>
                     </div>
 
-                    {/* Sources */}
+                    {/* Right Column: Risks & Criticisms */}
                     <div className="bg-crypto-card p-6 rounded-2xl border border-gray-800">
-                        <h3 className="text-lg font-bold text-white mb-4">{t.results.evidenceSources}</h3>
+                        <h4 className="text-lg font-semibold text-orange-500 mb-4 flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5" />
+                            {t.results.risksAndCriticisms}
+                        </h4>
                         <ul className="space-y-3">
-                            {analysis.sources.slice(0, 5).map((source, idx) => (
-                                <li key={idx} className="flex items-start gap-2 text-sm group">
-                                    <ExternalLink className="w-4 h-4 text-crypto-muted mt-0.5 flex-shrink-0" />
-                                    <a
-                                        href={source.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-gray-400 hover:text-crypto-accent truncate transition-colors"
-                                    >
-                                        {source.title}
-                                    </a>
+                            {analysis.riskFactors && analysis.riskFactors.length > 0 ? (
+                              analysis.riskFactors.map((risk, idx) => (
+                                <li key={idx} className="flex items-start gap-3 text-gray-300">
+                                    <AlertTriangle className="w-4 h-4 text-orange-500 mt-1 flex-shrink-0" />
+                                    <span>{risk}</span>
                                 </li>
-                            ))}
-                            {analysis.sources.length === 0 && (
-                                <li className="text-gray-500 italic">{t.results.noSources}</li>
+                              ))
+                            ) : (
+                              <li className="text-gray-500 italic">{t.results.noRisks}</li>
                             )}
                         </ul>
                     </div>
                 </div>
+            </div>
 
-                {/* Right Column: Timeline */}
-                <div className="lg:col-span-2">
-                    <HistoryTimeline
-                      events={analysis.history}
-                      title={t.results.trackRecord}
-                      language={language}
-                    />
-                </div>
+            {/* Track Record Timeline */}
+            <div>
+                <HistoryTimeline
+                  events={analysis.history}
+                  title={t.results.trackRecord}
+                  language={language}
+                />
             </div>
 
           </div>
