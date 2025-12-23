@@ -687,8 +687,59 @@ Provide a data-driven verdict and trustScore based on verified evidence from sea
       allWallets.push(...walletAddresses.BTC.map(w => `BTC:${w}`));
     }
 
+    // === LOW-EVIDENCE FALLBACK NORMALIZATION ===
+    // If Gemini returned minimal data and there are no grounded sources,
+    // force a standard "insufficient information" response for predictability.
+    const normalized: any = { ...data };
+
+    if (
+      sources.length === 0 &&
+      (!Array.isArray(normalized.history) || normalized.history.length === 0)
+    ) {
+      normalized.trustScore = 50;
+      normalized.totalWins = 0;
+      normalized.totalLosses = 0;
+
+      // If model didn't give a meaningful bio, provide a safe default
+      if (!normalized.bioSummary || !normalized.bioSummary.trim()) {
+        normalized.bioSummary =
+          language === 'zh-TW'
+            ? `目前缺乏足夠的公開資訊，無法為 ${displayName} 建立詳細的加密貨幣相關介紹。`
+            : `There is currently not enough public information to build a detailed crypto-related bio for ${displayName}.`;
+      }
+
+      normalized.verdict =
+        language === 'zh-TW'
+          ? '需要更多公開資訊才能進行風險評估。'
+          : 'Needs more public information before a fair risk assessment is possible.';
+
+      normalized.history = [
+        {
+          id: 'insufficient-data',
+          date: 'Recent',
+          description:
+            language === 'zh-TW'
+              ? `缺乏足夠的公開證據評估 ${displayName} 的加密貨幣相關聲譽`
+              : `Insufficient public evidence to evaluate ${displayName}'s crypto-related reputation`,
+          type: 'NEUTRAL_NEWS',
+          token: undefined,
+          sentiment: 'NEUTRAL',
+          details:
+            language === 'zh-TW'
+              ? '在 ZachXBT、Coffeezilla 或 Reddit 等主要風險來源中，尚未找到與此帳號有明確關聯的正面或負面報導。建議觀察其後續發文、贊助揭露與社群互動再做判斷。'
+              : 'No strong positive or negative evidence was found in major risk sources (e.g. ZachXBT, Coffeezilla, Reddit). Consider monitoring future posts, sponsorship disclosures, and community interactions before making decisions.',
+          sourceUrl: undefined,
+        },
+      ];
+
+      // Also make sure followersCount is a human-readable string if we know it
+      if (!normalized.followersCount && followersCount > 0) {
+        normalized.followersCount = followersCount.toLocaleString();
+      }
+    }
+
     const result = {
-      ...data,
+      ...normalized,
       handle,
       // Grounding sources - verified web links used for the analysis
       sources,
