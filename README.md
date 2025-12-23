@@ -73,7 +73,6 @@ This approach allows the AI to discover information across the entire web rather
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GEMINI_API_KEY` | Yes | Your Google Gemini API key |
-| `BLOB_READ_WRITE_TOKEN` | For production | Vercel Blob storage token (auto-configured on Vercel) |
 
 ## Deployment
 
