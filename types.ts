@@ -40,3 +40,39 @@ export interface KOLAnalysis {
 export type LoadingState = 'IDLE' | 'SEARCHING' | 'ANALYZING' | 'COMPLETED' | 'ERROR';
 
 export type Language = 'en' | 'zh-TW';
+
+// Twitter/X API Types
+export interface TweetMetrics {
+  retweet_count: number;
+  reply_count: number;
+  like_count: number;
+  quote_count: number;
+}
+
+export interface Tweet {
+  id: string;
+  text: string;
+  created_at?: string;
+  public_metrics?: TweetMetrics;
+}
+
+export interface TwitterUserMetrics {
+  followers_count: number;
+  following_count: number;
+  tweet_count: number;
+}
+
+export interface TwitterUser {
+  id: string;
+  name: string;
+  username: string;
+  public_metrics?: TwitterUserMetrics;
+}
+
+export interface TwitterSearchResult {
+  tweets: Tweet[];
+  user?: TwitterUser;
+  source: 'cache' | 'api';
+  cachedAt?: number;
+  error?: string;
+}

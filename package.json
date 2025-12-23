@@ -23,10 +23,12 @@
     "@google/genai": "^1.30.0",
     "@vercel/analytics": "^1.6.1",
     "@vercel/blob": "^0.27.1",
+    "dotenv": "^17.2.3",
     "lucide-react": "^0.555.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "recharts": "^3.5.1"
+    "recharts": "^3.5.1",
+    "twitter-api-v2": "^1.28.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
