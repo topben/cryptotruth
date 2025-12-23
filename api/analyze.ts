@@ -246,9 +246,23 @@ export default async function handler(req: any, res: any) {
       5. "${handle} paid promotion" and "${handle} sponsored" - Find undisclosed paid content
 
       ANALYSIS TASKS:
-      1. Good Reports (PREDICTION_WIN): Accurate price calls, early legitimate project discoveries, helpful analysis, community contributions
-      2. Negative Findings (PREDICTION_LOSS/CONTROVERSY): Rug pulls, scam promotions, failed predictions, pump-and-dump schemes, exit scams, stolen funds allegations
-      3. Paid Promos/Shilling Detection: Undisclosed sponsorships, coordinated shilling campaigns, sudden project promotions without disclosure, "influencer" token launches
+      1. CREDIBILITY STRENGTHS - Identify positive indicators such as:
+         - Mainstream media recognition or citations
+         - Transparent methodology (shares reasoning, admits uncertainty)
+         - History of self-correction when wrong
+         - Long-term consistent presence in crypto space
+         - Educational content that helps newcomers
+         - Verified credentials or professional background
+         - Community trust and positive testimonials
+
+      2. RISK FACTORS - Identify warning signs such as:
+         - Sponsorship controversies or undisclosed paid promotions
+         - Legal risks, investigations, or regulatory issues
+         - Aggressive narratives or fear-mongering tactics
+         - Association with failed projects or rug pulls
+         - Pump-and-dump behavior patterns
+         - Fake engagement or bot followers
+         - History of deleting failed predictions
 
       EVIDENCE PRIORITY:
       - ZachXBT threads carry high weight (on-chain investigator)
@@ -256,12 +270,12 @@ export default async function handler(req: any, res: any) {
       - Reddit consensus with evidence carries medium weight
       - Multiple independent sources confirming same issue = high confidence
 
-      SCORE LOGIC:
-      - 80-100: Proven track record, community trust, no scam involvement, transparent about sponsorships
-      - 60-79: Mixed record, some failed calls but no fraud, generally trusted
-      - 40-59: Questionable promotions, several failed calls, some community distrust
-      - 20-39: Paid shilling, multiple rug pull associations, poor prediction record
-      - 0-19: Confirmed scammer, rug puller, or fraud perpetrator (ZachXBT/Coffeezilla exposed)
+      SCORE LOGIC (based on qualitative factors):
+      - 80-100: Strong credibility strengths (mainstream recognition, transparent methodology, self-correction history), minimal or no risk factors
+      - 60-79: Some credibility strengths present, minor risk factors, generally positive community sentiment
+      - 40-59: Mixed profile - some strengths offset by notable risk factors, community opinion divided
+      - 20-39: Few credibility strengths, multiple significant risk factors (sponsorship issues, aggressive tactics)
+      - 0-19: No credibility strengths, severe risk factors (confirmed scams, legal issues, ZachXBT/Coffeezilla exposed)
 
       IMPORTANT: Do not deep dive into raw blockchain transaction pages. Focus on reputation and track record.
     `;
@@ -271,9 +285,7 @@ export default async function handler(req: any, res: any) {
       properties: {
         displayName: { type: Type.STRING, description: "Name of the KOL" },
         bioSummary: { type: Type.STRING, description: "1-2 sentence summary of their niche" },
-        trustScore: { type: Type.NUMBER, description: "0-100 score based on reputation (lower if scammer/shiller)" },
-        totalWins: { type: Type.NUMBER, description: "Count of successful calls/good reports" },
-        totalLosses: { type: Type.NUMBER, description: "Count of failed calls/scams/controversies" },
+        trustScore: { type: Type.NUMBER, description: "0-100 score based on qualitative credibility strengths vs risk factors" },
         followersCount: { type: Type.STRING, description: "Approximate follower count (e.g. '100K')" },
         verdict: { type: Type.STRING, description: "One-sentence verdict (e.g. 'High Risk Scammer')" },
         engagementQuality: {
@@ -282,10 +294,15 @@ export default async function handler(req: any, res: any) {
           description: "Assessment of follower/engagement authenticity based on search evidence",
           nullable: true
         },
+        credibilityStrengths: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "List of positive credibility indicators (e.g. mainstream recognition, transparent methodology, self-correction history)"
+        },
         riskFactors: {
           type: Type.ARRAY,
           items: { type: Type.STRING },
-          description: "List of identified risk factors from search results"
+          description: "List of identified risk factors (e.g. sponsorship controversies, legal risks, aggressive narratives)"
         },
         history: {
           type: Type.ARRAY,
@@ -311,7 +328,7 @@ export default async function handler(req: any, res: any) {
           }
         }
       },
-      required: ["displayName", "bioSummary", "trustScore", "totalWins", "totalLosses", "verdict", "history"]
+      required: ["displayName", "bioSummary", "trustScore", "verdict", "credibilityStrengths", "riskFactors", "history"]
     };
 
     const response = await ai.models.generateContent({
@@ -347,8 +364,12 @@ export default async function handler(req: any, res: any) {
       (!Array.isArray(normalized.history) || normalized.history.length === 0)
     ) {
       normalized.trustScore = 50;
-      normalized.totalWins = 0;
-      normalized.totalLosses = 0;
+      normalized.credibilityStrengths = [];
+      normalized.riskFactors = [
+        language === 'zh-TW'
+          ? '缺乏足夠公開資訊進行完整評估'
+          : 'Insufficient public information for complete assessment'
+      ];
 
       // If model didn't give a meaningful bio, provide a safe default
       if (!normalized.bioSummary || !normalized.bioSummary.trim()) {
@@ -386,7 +407,6 @@ export default async function handler(req: any, res: any) {
     const result = {
       ...normalized,
       handle,
-      sources: sources,
       // Search queries used by Google Search grounding
       searchQueries: searchQueries.length > 0 ? searchQueries : undefined,
       lastAnalyzed: new Date().toISOString(),
