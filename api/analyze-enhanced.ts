@@ -558,40 +558,51 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // Build the grounding prompt - focused on enabling Google Search verification
     const prompt = `
 Analyze Crypto KOL: "${handle}"
 Display Name: ${displayName}
 Bio: ${bioSummary || 'Not available'}
+
 ${langInstruction}
 
-${dataContext ? `\n=== REAL-TIME DATA FROM TWITTER/X ===\n${dataContext}` : ''}
+=== CONTEXT FROM TWITTER API ===
+${timelineData ? `Recent Tweets:\n${timelineData}` : 'No recent tweets found.'}
+${controversyData ? `\nPotential Controversy Mentions:\n${controversyData}` : ''}
+Followers: ${followersCount.toLocaleString()}
+${engagementAudit ? `
+Engagement Metrics:
+- Average Likes: ${engagementAudit.averageLikes}
+- Average Retweets: ${engagementAudit.averageRetweets}
+- Engagement Rate: ${engagementAudit.engagementRate}%
+- Ghost Follower Risk: ${engagementAudit.ghostFollowerRisk}
+- Analysis: ${engagementAudit.analysisNote}` : ''}
+${shillAnalysis && shillAnalysis.totalShillTweets > 0 ? `
+Shill Detection:
+- Total promotional tweets: ${shillAnalysis.totalShillTweets}
+- Undisclosed promotions: ${shillAnalysis.undisclosedPromos}
+- Properly disclosed: ${shillAnalysis.disclosedPromos}` : ''}
+${walletAddresses && (walletAddresses.ETH.length > 0 || walletAddresses.SOL.length > 0 || walletAddresses.BTC.length > 0) ? `
+Wallet Addresses Found:
+${walletAddresses.ETH.length > 0 ? `- ETH: ${walletAddresses.ETH.join(', ')}` : ''}
+${walletAddresses.SOL.length > 0 ? `- SOL: ${walletAddresses.SOL.join(', ')}` : ''}
+${walletAddresses.BTC.length > 0 ? `- BTC: ${walletAddresses.BTC.join(', ')}` : ''}` : ''}
 
-=== REQUIRED WEB SEARCHES ===
-Use exact queries to find investigative reports:
-1. "ZachXBT ${handle}" - On-chain investigative reports
-2. "Coffeezilla ${handle}" - Video exposés
-3. "Reddit r/CryptoCurrency ${handle}" - Community warnings or scam threads
-4. "${handle} crypto scam allegations"
-5. "${handle} rug pull history"
-
-=== VERIFICATION TASKS ===
-1. **Engagement Quality**: ${engagementAudit
-  ? `Based on the audit data above (${engagementAudit.ghostFollowerRisk} ghost follower risk), verify if engagement seems organic.`
-  : 'Search for follower-to-engagement ratio analysis.'}
-2. **Shill Detection**: ${shillAnalysis && shillAnalysis.undisclosedPromos > 0
-  ? `We detected ${shillAnalysis.undisclosedPromos} undisclosed promotional tweets. Factor this into the trust score.`
-  : 'Look for patterns of undisclosed paid promotions.'}
-3. **On-Chain Verification**: ${walletAddresses && (walletAddresses.ETH.length > 0 || walletAddresses.SOL.length > 0)
-  ? `Wallet addresses found: ${[...walletAddresses.ETH, ...walletAddresses.SOL].slice(0, 3).join(', ')}. Note these for user verification.`
-  : 'Search for any wallet addresses associated with this KOL.'}
+=== INSTRUCTIONS ===
+Use Google Search to audit this individual. Focus on:
+1. On-chain investigations by "ZachXBT" or video reports by "Coffeezilla".
+2. Community sentiment on "Reddit r/CryptoCurrency".
+3. History of "rug pulls", "scams", or "pump and dump" allegations.
+4. Evidence of undisclosed "paid promotions" or "shilling".
+5. Track record of crypto predictions and project endorsements.
 
 === SCORE LOGIC ===
-- 85-100: TRUSTED. Transparent about ads, high organic engagement, praised by investigators.
-- 60-84: MIXED. Some failed calls or aggressive marketing, but no theft or rug pulls.
-- 30-59: RISKY. Frequent shilling, undisclosed ads, or significant backlash.
-- 0-29: SCAM ALERT. Confirmed rug pulls, exit scams, or documented fraud.
+- 85-100: Proven track record, no scams, transparent disclosures.
+- 60-84: Mixed record, some failed calls, generally safe.
+- 30-59: Risky. Significant shilling or community backlash.
+- 0-29: SCAM ALERT. Confirmed fraud or rug pull history.
 
-Provide a data-driven 'verdict' and 'trustScore' based on the ratio of wins vs controversies/scams.
+Provide a data-driven verdict and trustScore based on verified evidence from search results.
 `;
 
     const analysisSchema = {
@@ -599,15 +610,20 @@ Provide a data-driven 'verdict' and 'trustScore' based on the ratio of wins vs c
       properties: {
         displayName: { type: Type.STRING },
         bioSummary: { type: Type.STRING },
-        trustScore: { type: Type.NUMBER, description: "0-100 based on reputation" },
-        totalWins: { type: Type.NUMBER },
-        totalLosses: { type: Type.NUMBER },
+        trustScore: { type: Type.NUMBER, description: "0-100 based on reputation from verified sources" },
+        totalWins: { type: Type.NUMBER, description: "Verified successful predictions/projects" },
+        totalLosses: { type: Type.NUMBER, description: "Failed predictions or controversies" },
         followersCount: { type: Type.STRING },
-        verdict: { type: Type.STRING, description: "One-sentence verdict" },
+        verdict: { type: Type.STRING, description: "One-sentence verdict based on search evidence" },
         engagementQuality: {
           type: Type.STRING,
           enum: ["ORGANIC", "MIXED", "SUSPICIOUS", "BOT_HEAVY"],
           description: "Assessment of follower/engagement authenticity"
+        },
+        riskFactors: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "List of identified risk factors from search results"
         },
         history: {
           type: Type.ARRAY,
@@ -619,12 +635,12 @@ Provide a data-driven 'verdict' and 'trustScore' based on the ratio of wins vs c
               description: { type: Type.STRING },
               type: {
                 type: Type.STRING,
-                enum: ["PREDICTION_WIN", "PREDICTION_LOSS", "CONTROVERSY", "NEUTRAL_NEWS"]
+                enum: ["PREDICTION_WIN", "PREDICTION_LOSS", "CONTROVERSY", "NEUTRAL_NEWS", "SCAM_ALLEGATION", "INVESTIGATION"]
               },
               token: { type: Type.STRING, nullable: true },
               sentiment: { type: Type.STRING, enum: ["POSITIVE", "NEGATIVE", "NEUTRAL"] },
               details: { type: Type.STRING },
-              sourceUrl: { type: Type.STRING, nullable: true }
+              sourceUrl: { type: Type.STRING, nullable: true, description: "URL where this information was found" }
             },
             required: ["id", "date", "description", "type", "sentiment", "details"]
           }
@@ -633,10 +649,13 @@ Provide a data-driven 'verdict' and 'trustScore' based on the ratio of wins vs c
       required: ["displayName", "bioSummary", "trustScore", "totalWins", "totalLosses", "verdict", "history"]
     };
 
+    // Call Gemini with Google Search Tool enabled for grounding
+    // This enables the AI to fact-check against live Google search results
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.0-flash", // Grounding works best with 2.0 Flash
       contents: prompt,
       config: {
+        // THIS ENABLES GOOGLE SEARCH GROUNDING - forces AI to verify against live search
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
         responseSchema: analysisSchema,
@@ -646,11 +665,19 @@ Provide a data-driven 'verdict' and 'trustScore' based on the ratio of wins vs c
     const text = response.text;
     const data = JSON.parse(text || "{}");
 
-    // Extract grounding sources
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    // Extract Grounding Metadata (Citations/Sources)
+    // This allows the UI to show users exactly where the AI found its information
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    const groundingChunks = groundingMetadata?.groundingChunks || [];
     const sources = groundingChunks
       .map((chunk: any) => chunk.web ? { title: chunk.web.title, url: chunk.web.uri } : null)
       .filter((s: any) => s !== null);
+
+    // Extract search queries used for grounding (if available)
+    const searchQueries = groundingMetadata?.webSearchQueries || [];
+
+    // Extract grounding support (confidence scores for grounded content)
+    const groundingSupport = groundingMetadata?.groundingSupports || [];
 
     // Compile wallet addresses for response
     const allWallets: string[] = [];
@@ -663,8 +690,11 @@ Provide a data-driven 'verdict' and 'trustScore' based on the ratio of wins vs c
     const result = {
       ...data,
       handle,
+      // Grounding sources - verified web links used for the analysis
       sources,
-      // Enhanced data
+      // Search queries used by Google Search grounding
+      searchQueries: searchQueries.length > 0 ? searchQueries : undefined,
+      // Enhanced Twitter data
       engagementAudit: engagementAudit || undefined,
       shillAnalysis: shillAnalysis ? {
         totalShillTweets: shillAnalysis.totalShillTweets,
@@ -672,7 +702,9 @@ Provide a data-driven 'verdict' and 'trustScore' based on the ratio of wins vs c
         disclosedPromos: shillAnalysis.disclosedPromos
       } : undefined,
       walletAddresses: allWallets.length > 0 ? allWallets : undefined,
-      lastAnalyzed: new Date().toISOString()
+      // Metadata
+      lastAnalyzed: new Date().toISOString(),
+      groundedSearch: sources.length > 0 // Indicates if Google Search grounding was used
     };
 
     // Cache the result
@@ -684,8 +716,26 @@ Provide a data-driven 'verdict' and 'trustScore' based on the ratio of wins vs c
     });
 
   } catch (error: any) {
-    console.error("Enhanced Analysis API Error:", error);
-    const status = error.status || (error.message?.includes('429') ? 429 : 500);
-    return res.status(status).json({ error: error.message || 'An unexpected error occurred' });
+    console.error("Grounding API Error:", error);
+
+    // Handle specific error types
+    let status = 500;
+    let errorMessage = error.message || 'An unexpected error occurred';
+
+    if (error.message?.includes('429') || error.status === 429) {
+      status = 429;
+      errorMessage = 'Rate limit exceeded. Please try again later.';
+    } else if (error.message?.includes('API key')) {
+      status = 500;
+      errorMessage = 'Server configuration error: Invalid API key';
+    } else if (error.message?.includes('grounding') || error.message?.includes('search')) {
+      status = 503;
+      errorMessage = 'Google Search grounding temporarily unavailable. Please try again.';
+    }
+
+    return res.status(status).json({
+      error: errorMessage,
+      groundedSearch: false
+    });
   }
 }
