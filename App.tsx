@@ -281,8 +281,25 @@ const App: React.FC = () => {
                         <Activity size={80} />
                     </div>
 
-                    <h2 className="text-2xl font-bold text-white mb-1">@{analysis.handle}</h2>
-                    <p className="text-crypto-muted font-mono text-sm mb-4">{analysis.displayName}</p>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white mb-1">@{analysis.handle}</h2>
+                            <p className="text-crypto-muted font-mono text-sm mb-4">{analysis.displayName}</p>
+                        </div>
+
+                        {/* Identity Status Badge */}
+                        {analysis.identityStatus === 'UNKNOWN_ENTITY' && (
+                            <span className="bg-gray-700 text-gray-300 text-xs px-2 py-1 rounded border border-gray-600">
+                                ❓ {language === 'zh-TW' ? '身分未明' : 'Unknown Entity'}
+                            </span>
+                        )}
+                        {analysis.identityStatus === 'IMPERSONATOR' && (
+                            <span className="bg-red-900/50 text-red-400 text-xs px-2 py-1 rounded border border-red-800 animate-pulse">
+                                ⚠️ {language === 'zh-TW' ? '冒充者警示' : 'Impersonator'}
+                            </span>
+                        )}
+                    </div>
+
                     <p className="text-gray-300 leading-relaxed">
                         {analysis.bioSummary}
                     </p>

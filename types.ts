@@ -4,6 +4,9 @@ export enum Sentiment {
   NEUTRAL = 'NEUTRAL'
 }
 
+// Identity Status Classification
+export type IdentityStatus = 'UNKNOWN_ENTITY' | 'VERIFIED_INFLUENCER' | 'IMPERSONATOR' | 'OFFICIAL_PROJECT';
+
 export interface SourceLink {
   title: string;
   url: string;
@@ -45,6 +48,7 @@ export interface KOLAnalysis {
   displayName: string;
   bioSummary: string;
   trustScore: number; // 0 to 100
+  identityStatus?: IdentityStatus; // Identity classification (optional for backward compat with cache)
   followersCount?: string;
   walletAddresses?: string[]; // Public wallet addresses found (format: "ETH:0x...", "SOL:...")
   verdict?: string; // One-sentence summary verdict (e.g., "High Risk Scammer")
