@@ -20,6 +20,26 @@ export interface HistoryEvent {
   sourceUrl?: string; // URL to evidence source for this specific event
 }
 
+// Engagement Quality Audit Results
+export interface EngagementAudit {
+  averageLikes: number;
+  averageRetweets: number;
+  averageReplies: number;
+  engagementRate: number; // Percentage
+  ghostFollowerRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+  analysisNote: string;
+}
+
+// Shill/Promotional Content Analysis
+export interface ShillAnalysisSummary {
+  totalShillTweets: number;
+  undisclosedPromos: number;
+  disclosedPromos: number;
+}
+
+// Engagement Quality Assessment
+export type EngagementQuality = 'ORGANIC' | 'MIXED' | 'SUSPICIOUS' | 'BOT_HEAVY';
+
 export interface KOLAnalysis {
   handle: string;
   displayName: string;
@@ -28,8 +48,11 @@ export interface KOLAnalysis {
   totalWins: number;
   totalLosses: number;
   followersCount?: string;
-  walletAddresses?: string[]; // Public wallet addresses found
+  walletAddresses?: string[]; // Public wallet addresses found (format: "ETH:0x...", "SOL:...")
   verdict?: string; // One-sentence summary verdict (e.g., "High Risk Scammer")
+  engagementQuality?: EngagementQuality; // Assessment of follower authenticity
+  engagementAudit?: EngagementAudit; // Detailed engagement metrics
+  shillAnalysis?: ShillAnalysisSummary; // Promotional content analysis
   history: HistoryEvent[];
   sources: SourceLink[];
   lastAnalyzed: string;
