@@ -45,17 +45,15 @@ export interface KOLAnalysis {
   displayName: string;
   bioSummary: string;
   trustScore: number; // 0 to 100
-  totalWins: number;
-  totalLosses: number;
   followersCount?: string;
   walletAddresses?: string[]; // Public wallet addresses found (format: "ETH:0x...", "SOL:...")
   verdict?: string; // One-sentence summary verdict (e.g., "High Risk Scammer")
   engagementQuality?: EngagementQuality; // Assessment of follower authenticity (from search grounding)
-  riskFactors?: string[]; // List of identified risk factors from search results
+  credibilityStrengths: string[]; // List of positive credibility indicators
+  riskFactors: string[]; // List of identified risk factors from search results
   engagementAudit?: EngagementAudit; // Detailed engagement metrics (optional, from search grounding)
   shillAnalysis?: ShillAnalysisSummary; // Promotional content analysis (optional, from search grounding)
   history: HistoryEvent[];
-  sources: SourceLink[];
   searchQueries?: string[]; // Search queries used by Google Search grounding
   groundedSearch?: boolean; // Indicates if Google Search grounding was used
   lastAnalyzed: string;
