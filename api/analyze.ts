@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { list, put } from "@vercel/blob";
 
 // Configuration
-const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_DURATION_MS = 72 * 60 * 60 * 1000; // 72 hours
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour window
 const MAX_REQUESTS_PER_WINDOW = 10; // Max 10 API calls per IP per hour
 const MAX_HANDLE_LENGTH = 50;
@@ -132,7 +132,7 @@ const getCachedAnalysis = async (handle: string, language: string) => {
     const uploadedAt = new Date(blob.uploadedAt).getTime();
     const age = Date.now() - uploadedAt;
 
-    // Check if cache is expired (> 24 hours)
+    // Check if cache is expired (> 72 hours)
     if (age > CACHE_DURATION_MS) {
       console.log(`Cache expired for ${handle} (age: ${Math.round(age / 1000 / 60)} minutes)`);
       return null;
