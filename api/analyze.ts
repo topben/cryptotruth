@@ -290,8 +290,13 @@ export default async function handler(req: any, res: any) {
       - 0-19: No credibility strengths, severe risk factors (confirmed scams, legal issues, ZachXBT/Coffeezilla exposed)
 
       IMPORTANT: Do not deep dive into raw blockchain transaction pages. Focus on reputation and track record.
+
+      IMPORTANT: Return the analysis as a raw, parsable JSON object ONLY. Do not use markdown code blocks (e.g., no \`\`\`json), no backticks, and no introductory text.
     `;
 
+    // Schema kept for documentation purposes. Not passed to API due to
+    // Gemini 2.5 limitation: Tools (googleSearch) and JSON schema cannot be used together.
+    // JSON formatting is instead enforced via prompt instructions above.
     const analysisSchema = {
       type: Type.OBJECT,
       properties: {
@@ -348,8 +353,6 @@ export default async function handler(req: any, res: any) {
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: analysisSchema,
       },
     });
 
