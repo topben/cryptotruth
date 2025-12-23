@@ -202,8 +202,20 @@ export default async function handler(req: any, res: any) {
     if (!forceRefresh) {
       const cached = await getCachedAnalysis(handle, language);
       if (cached) {
-        return res.status(200).json({
+        // Normalize old cached data to new schema (backward compatibility)
+        const normalizedCache = {
           ...cached.data,
+          // Ensure new required fields exist with defaults
+          credibilityStrengths: cached.data.credibilityStrengths || [],
+          riskFactors: cached.data.riskFactors || [],
+        };
+        // Remove deprecated fields from old cache
+        delete normalizedCache.totalWins;
+        delete normalizedCache.totalLosses;
+        delete normalizedCache.sources;
+
+        return res.status(200).json({
+          ...normalizedCache,
           handle,
           source: 'cache',
           cachedAt: cached.cachedAt
