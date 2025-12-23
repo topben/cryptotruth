@@ -14,7 +14,7 @@ export const analyzeKOLHandle = async (
   language: Language = 'en',
   forceRefresh: boolean = false
 ): Promise<KOLAnalysis> => {
-  const response = await fetch('/api/analyze-enhanced', {
+  const response = await fetch('/api/analyze', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

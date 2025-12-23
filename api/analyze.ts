@@ -276,6 +276,17 @@ export default async function handler(req: any, res: any) {
         totalLosses: { type: Type.NUMBER, description: "Count of failed calls/scams/controversies" },
         followersCount: { type: Type.STRING, description: "Approximate follower count (e.g. '100K')" },
         verdict: { type: Type.STRING, description: "One-sentence verdict (e.g. 'High Risk Scammer')" },
+        engagementQuality: {
+          type: Type.STRING,
+          enum: ["ORGANIC", "MIXED", "SUSPICIOUS", "BOT_HEAVY"],
+          description: "Assessment of follower/engagement authenticity based on search evidence",
+          nullable: true
+        },
+        riskFactors: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "List of identified risk factors from search results"
+        },
         history: {
           type: Type.ARRAY,
           items: {
@@ -286,7 +297,7 @@ export default async function handler(req: any, res: any) {
               description: { type: Type.STRING, description: "Short title of event" },
               type: {
                 type: Type.STRING,
-                enum: ["PREDICTION_WIN", "PREDICTION_LOSS", "CONTROVERSY", "NEUTRAL_NEWS"]
+                enum: ["PREDICTION_WIN", "PREDICTION_LOSS", "CONTROVERSY", "NEUTRAL_NEWS", "SCAM_ALLEGATION", "INVESTIGATION"]
               },
               token: { type: Type.STRING, description: "Token symbol if applicable", nullable: true },
               sentiment: {
@@ -316,16 +327,70 @@ export default async function handler(req: any, res: any) {
     const text = response.text;
     const data = JSON.parse(text || "{}");
 
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    // Extract Grounding Metadata (Citations/Sources)
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    const groundingChunks = groundingMetadata?.groundingChunks || [];
     const sources = groundingChunks
       .map((chunk: any) => chunk.web ? { title: chunk.web.title, url: chunk.web.uri } : null)
       .filter((s: any) => s !== null);
 
+    // Extract search queries used for grounding (if available)
+    const searchQueries = groundingMetadata?.webSearchQueries || [];
+
+    // === LOW-EVIDENCE FALLBACK NORMALIZATION ===
+    // If Gemini returned minimal data and there are no grounded sources,
+    // force a standard "insufficient information" response for predictability.
+    const normalized: any = { ...data };
+
+    if (
+      sources.length === 0 &&
+      (!Array.isArray(normalized.history) || normalized.history.length === 0)
+    ) {
+      normalized.trustScore = 50;
+      normalized.totalWins = 0;
+      normalized.totalLosses = 0;
+
+      // If model didn't give a meaningful bio, provide a safe default
+      if (!normalized.bioSummary || !normalized.bioSummary.trim()) {
+        normalized.bioSummary =
+          language === 'zh-TW'
+            ? `目前缺乏足夠的公開資訊，無法為 ${normalized.displayName || handle} 建立詳細的加密貨幣相關介紹。`
+            : `There is currently not enough public information to build a detailed crypto-related bio for ${normalized.displayName || handle}.`;
+      }
+
+      normalized.verdict =
+        language === 'zh-TW'
+          ? '需要更多公開資訊才能進行風險評估。'
+          : 'Needs more public information before a fair risk assessment is possible.';
+
+      normalized.history = [
+        {
+          id: 'insufficient-data',
+          date: 'Recent',
+          description:
+            language === 'zh-TW'
+              ? `缺乏足夠的公開證據評估 ${normalized.displayName || handle} 的加密貨幣相關聲譽`
+              : `Insufficient public evidence to evaluate ${normalized.displayName || handle}'s crypto-related reputation`,
+          type: 'NEUTRAL_NEWS',
+          token: undefined,
+          sentiment: 'NEUTRAL',
+          details:
+            language === 'zh-TW'
+              ? '在 ZachXBT、Coffeezilla 或 Reddit 等主要風險來源中，尚未找到與此帳號有明確關聯的正面或負面報導。建議觀察其後續發文、贊助揭露與社群互動再做判斷。'
+              : 'No strong positive or negative evidence was found in major risk sources (e.g. ZachXBT, Coffeezilla, Reddit). Consider monitoring future posts, sponsorship disclosures, and community interactions before making decisions.',
+          sourceUrl: undefined,
+        },
+      ];
+    }
+
     const result = {
-      ...data,
+      ...normalized,
       handle,
       sources: sources,
-      lastAnalyzed: new Date().toISOString()
+      // Search queries used by Google Search grounding
+      searchQueries: searchQueries.length > 0 ? searchQueries : undefined,
+      lastAnalyzed: new Date().toISOString(),
+      groundedSearch: sources.length > 0 // Indicates if Google Search grounding was used
     };
 
     // Save to cache (async, don't wait)
@@ -338,7 +403,25 @@ export default async function handler(req: any, res: any) {
 
   } catch (error: any) {
     console.error("API Error:", error);
-    const status = error.status || (error.message?.includes('429') ? 429 : 500);
-    return res.status(status).json({ error: error.message || 'An unexpected error occurred' });
+
+    // Handle specific error types
+    let status = 500;
+    let errorMessage = error.message || 'An unexpected error occurred';
+
+    if (error.message?.includes('429') || error.status === 429) {
+      status = 429;
+      errorMessage = 'Rate limit exceeded. Please try again later.';
+    } else if (error.message?.includes('API key')) {
+      status = 500;
+      errorMessage = 'Server configuration error: Invalid API key';
+    } else if (error.message?.includes('grounding') || error.message?.includes('search')) {
+      status = 503;
+      errorMessage = 'Google Search grounding temporarily unavailable. Please try again.';
+    }
+
+    return res.status(status).json({
+      error: errorMessage,
+      groundedSearch: false
+    });
   }
 }

@@ -5,9 +5,10 @@ AI-powered due diligence platform for analyzing cryptocurrency Key Opinion Leade
 ## Features
 
 - **Trust Score Analysis** - AI-driven reputation scoring (0-100) based on track record
+- **Google Search Grounding** - Real-time fact-checking using Gemini 2.0 Flash's built-in search
 - **Track Record Verification** - Identify successful predictions vs. failed calls
-- **Controversy Detection** - Surface rug pulls, scams, and paid promotions
-- **Evidence Sources** - Provides links to sources backing up claims
+- **Controversy Detection** - Surface rug pulls, scams, and paid promotions via web search
+- **Evidence Sources** - Provides links to sources backing up claims (ZachXBT, Coffeezilla, Reddit, etc.)
 - **Event Timeline** - Visual timeline of significant events
 - **Multi-language Support** - English and Traditional Chinese (zh-TW)
 - **Caching** - 24-hour caching for performance optimization
@@ -16,10 +17,22 @@ AI-powered due diligence platform for analyzing cryptocurrency Key Opinion Leade
 ## Tech Stack
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS, Vite
-- **AI**: Google Gemini 2.0 Flash with web search capabilities
+- **AI**: Google Gemini 2.0 Flash with Google Search grounding
 - **Backend**: Vercel Serverless Functions
 - **Caching**: Vercel Blob Storage
 - **i18n**: Built-in language support (English, Traditional Chinese)
+
+## How It Works
+
+CryptoTruth uses Gemini 2.0 Flash's Google Search grounding capability to perform real-time fact-checking. When you search for a KOL, the AI:
+
+1. Searches for investigations by crypto detectives like ZachXBT
+2. Looks for coverage by investigators like Coffeezilla
+3. Finds community discussions on Reddit r/CryptoCurrency
+4. Identifies scam allegations, rug pulls, and fraud reports
+5. Detects patterns of undisclosed paid promotions
+
+This approach allows the AI to discover information across the entire web rather than being limited to a single data source.
 
 ## Getting Started
 
@@ -85,13 +98,13 @@ npm run preview
 ```
 cryptotruth/
 ├── api/
-│   └── analyze.ts        # Serverless API endpoint
+│   └── analyze.ts        # Serverless API endpoint with Google Search grounding
 ├── components/
 │   ├── HistoryTimeline.tsx
 │   ├── SearchInput.tsx
 │   └── TrustMeter.tsx
 ├── services/
-│   └── geminiService.ts
+│   └── geminiService.ts  # Frontend service for API calls
 ├── public/
 ├── App.tsx
 ├── index.tsx
@@ -123,6 +136,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- Powered by [Google Gemini](https://ai.google.dev/)
+- Powered by [Google Gemini](https://ai.google.dev/) with Google Search grounding
 - Built with [React](https://react.dev/) and [Vite](https://vitejs.dev/)
 - Deployed on [Vercel](https://vercel.com/)
