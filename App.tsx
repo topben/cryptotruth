@@ -5,6 +5,7 @@ import { analyzeKOLHandle, APIError } from './services/geminiService';
 import SearchInput from './components/SearchInput';
 import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
+import KOLVerdictHeader from './components/KOLVerdictHeader';
 import { ShieldAlert, TrendingUp, TrendingDown, ExternalLink, Activity, Search, Share2, Globe } from 'lucide-react';
 // RefreshCw removed - refresh functionality disabled
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -275,6 +276,15 @@ const App: React.FC = () => {
         {/* Results View */}
         {analysis && loadingState === 'COMPLETED' && (
           <div className="animate-fade-in-up">
+
+            {/* KOL Verdict Header - Immediate verdict summary at the top */}
+            <KOLVerdictHeader
+              handle={analysis.handle}
+              displayName={analysis.displayName}
+              score={analysis.trustScore}
+              summary={analysis.verdict}
+              language={language}
+            />
 
             {/* Top Profile Card */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-8">
