@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { list, put } from "@vercel/blob";
 
 // Configuration
@@ -57,6 +57,25 @@ const hashIP = (ip: string): string => {
     hash = hash & hash; // Convert to 32bit integer
   }
   return Math.abs(hash).toString(36);
+};
+
+/**
+ * Extract JSON from a potentially markdown-formatted string
+ */
+const extractJSON = (text: string): string => {
+  // Remove markdown code blocks if present
+  let cleaned = text.trim();
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.slice(3);
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  // Extract the JSON object
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  return jsonMatch ? jsonMatch[0] : cleaned;
 };
 
 /**
@@ -286,60 +305,41 @@ export default async function handler(req: any, res: any) {
     // === CALL GEMINI API ===
     const ai = new GoogleGenAI({ apiKey });
 
-    // Optimized prompt - minified for token efficiency
+    // Prompt with schema as text (responseSchema not supported with Search tool)
     const prompt = `
-    TASK: Background check Crypto KOL "${handle}".
-    LANG: ${language === 'zh-TW' ? 'Traditional Chinese' : 'English'}.
-    STEPS:
-    1. ID: Verify if user is real/notable. If unknown/random, set s=0. If verified influencer, s=1. If impersonator, s=2.
-    2. SEARCH: "ZachXBT ${handle}", "Coffeezilla ${handle}", "Reddit r/CryptoCurrency ${handle}", "${handle} scam", "${handle} rug pull", "${handle} paid promo".
-    3. SCORE: 0(Scam)-100(Trusted). <20: Fraud. 20-40: Shiller. 40-60: Unknown. >80: Leader.
-    OUTPUT: JSON only.
-    `;
+TASK: Detailed background check on Crypto Influencer "${handle}".
+LANGUAGE: ${language === 'zh-TW' ? 'Traditional Chinese' : 'English'}.
 
-    // Minified schema for token efficiency
-    const analysisSchema = {
-      type: Type.OBJECT,
-      properties: {
-        d: { type: Type.STRING, description: "Display Name" },
-        b: { type: Type.STRING, description: "Bio Summary (max 15 words)" },
-        s: { type: Type.NUMBER, description: "Status: 0=Unknown, 1=Verified, 2=Impersonator, 3=Official" },
-        ts: { type: Type.NUMBER, description: "Trust Score (0-100)" },
-        v: { type: Type.STRING, description: "Verdict (Short)" },
-        eq: { type: Type.NUMBER, description: "Engagement: 0=Org, 1=Mix, 2=Sus, 3=Bot", nullable: true },
-        c: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Credibility Strengths" },
-        r: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Risk Factors" },
-        h: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              dt: { type: Type.STRING, description: "Date (YYYY-MM-DD or 'Recent')" },
-              e: { type: Type.STRING, description: "Event description" },
-              t: { type: Type.NUMBER, description: "Type: 0=Win,1=Loss,2=Controv,3=News,4=Scam,5=Invest" },
-              tk: { type: Type.STRING, description: "Token symbol", nullable: true },
-              s: { type: Type.NUMBER, description: "Sentiment: 0=Pos,1=Neg,2=Neu" },
-              x: { type: Type.STRING, description: "Details" }
-            },
-            required: ["dt", "e", "t", "s", "x"]
-          }
-        }
-      },
-      required: ["d", "b", "s", "ts", "v", "c", "r", "h"]
-    };
+INSTRUCTIONS:
+1. Use Google Search to find history, controversies, and track records.
+2. Search for: "ZachXBT ${handle}", "Coffeezilla ${handle}", "Reddit r/CryptoCurrency ${handle}", "${handle} rug pull", "${handle} scam", "${handle} paid promo".
+3. SCORE: 0(Scam)-100(Trusted). <20: Fraud. 20-40: Shiller. 40-60: Unknown. >80: Leader.
+4. Output the result in JSON format ONLY. Do not include any text before or after the JSON.
+
+JSON SCHEMA (use these exact field names):
+{
+  "d": "Display Name",
+  "b": "Short Bio (max 15 words)",
+  "s": 0-3 (0=Unknown, 1=Verified Influencer, 2=Impersonator, 3=Official Project),
+  "ts": Trust Score (0-100),
+  "v": "One sentence verdict",
+  "eq": 0-3 (0=Organic, 1=Mixed, 2=Suspicious, 3=BotHeavy),
+  "c": ["Credibility Strengths array"],
+  "r": ["Risk Factors array"],
+  "h": [{"dt": "YYYY-MM-DD", "e": "Event Title", "t": 0-5 (0=Win,1=Loss,2=Controversy,3=News,4=Scam,5=Investigation), "tk": "Token symbol or null", "s": 0-2 (0=Positive,1=Negative,2=Neutral), "x": "Details"}]
+}
+`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: analysisSchema,
       },
     });
 
-    const text = response.text;
-    const minData = JSON.parse(text || "{}");
+    const text = response.text || "";
+    const minData = JSON.parse(extractJSON(text) || "{}");
 
     // Extract Grounding Metadata (Citations/Sources)
     const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
