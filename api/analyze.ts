@@ -60,6 +60,25 @@ const hashIP = (ip: string): string => {
 };
 
 /**
+ * Safely parse JSON from a fetch response, returning null on failure
+ */
+const safeJsonParse = async (response: Response): Promise<any | null> => {
+  if (!response.ok) {
+    return null;
+  }
+  try {
+    const text = await response.text();
+    // Check if the response looks like JSON before parsing
+    if (!text.trim().startsWith('{') && !text.trim().startsWith('[')) {
+      return null;
+    }
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Check and update rate limit for an IP
  */
 const checkRateLimit = async (ip: string): Promise<{ allowed: boolean; remaining: number }> => {
@@ -73,7 +92,18 @@ const checkRateLimit = async (ip: string): Promise<{ allowed: boolean; remaining
     if (blobs.length > 0) {
       const blob = blobs[0];
       const response = await fetch(blob.url);
-      const data = await response.json();
+      const data = await safeJsonParse(response);
+
+      // If data is invalid, treat as no existing rate limit
+      if (!data || typeof data.windowStart !== 'number' || typeof data.count !== 'number') {
+        const newData = { windowStart: now, count: 1 };
+        await put(rateLimitPath, JSON.stringify(newData), {
+          access: 'public',
+          addRandomSuffix: false,
+          contentType: 'application/json'
+        });
+        return { allowed: true, remaining: MAX_REQUESTS_PER_WINDOW - 1 };
+      }
 
       // Check if window has expired
       if (now - data.windowStart > RATE_LIMIT_WINDOW_MS) {
@@ -149,7 +179,13 @@ const getCachedAnalysis = async (handle: string, language: string) => {
 
     // Fetch the cached data
     const response = await fetch(blob.url);
-    const data = await response.json();
+    const data = await safeJsonParse(response);
+
+    // If data is invalid, treat as cache miss
+    if (!data) {
+      console.log(`Cache invalid for ${handle} - could not parse JSON`);
+      return null;
+    }
 
     console.log(`Cache hit for ${handle} (age: ${Math.round(age / 1000 / 60)} minutes)`);
     return {
