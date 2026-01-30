@@ -68,3 +68,52 @@ export interface KOLAnalysis {
 export type LoadingState = 'IDLE' | 'SEARCHING' | 'ANALYZING' | 'COMPLETED' | 'ERROR';
 
 export type Language = 'en' | 'zh-TW';
+
+// ========== TruthGuard AI Types (Hackathon Modules) ==========
+
+// Input type for flexible analysis (Module A)
+export type InputType = 'HANDLE' | 'URL' | 'SMS_TEXT';
+
+export interface AnalysisInput {
+  type: InputType;
+  content: string;  // The actual handle, URL, or SMS text
+}
+
+// Risk Signal (Module B - Explainable Evidence)
+export interface RiskSignal {
+  type: string;           // e.g., "GUARANTEED_RETURNS", "PRESSURE_TACTICS", "IMPERSONATION"
+  evidence: string;       // Specific evidence supporting this signal
+  level: 'CRITICAL' | 'WARNING' | 'INFO';
+}
+
+// Action Plan (Module C - Action Guidance)
+export type ActionType = 'CALL_165' | 'BLOCK' | 'OFFICIAL_CHANNEL' | 'REPORT' | 'VERIFY' | 'IGNORE';
+
+export interface ActionPlan {
+  label: string;          // Button text (bilingual)
+  actionUrl?: string;     // URL to open (if applicable)
+  type: ActionType;
+  priority: number;       // 1 = highest priority
+}
+
+// Extended Analysis with TruthGuard features
+export interface TruthGuardAnalysis extends KOLAnalysis {
+  // Module A: Input flexibility
+  inputType: InputType;
+  originalInput: string;
+
+  // Module B: Explainable evidence
+  riskSignals: RiskSignal[];
+
+  // Module C: Action guidance
+  suggestedActions: ActionPlan[];
+
+  // Senior mode
+  isSeniorMode?: boolean;
+
+  // Scam probability (0-100)
+  scamProbability: number;
+
+  // Quick verdict for senior mode
+  seniorModeVerdict?: string;
+}
