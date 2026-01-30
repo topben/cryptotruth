@@ -6,7 +6,9 @@ const CACHE_DURATION_MS = 72 * 60 * 60 * 1000; // 72 hours
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour window
 const MAX_REQUESTS_PER_WINDOW = 10; // Max 10 API calls per IP per hour
 const MAX_HANDLE_LENGTH = 50;
+const MAX_INPUT_LENGTH = 2000; // Max length for URL or SMS text
 const ALLOWED_LANGUAGES = ['en', 'zh-TW'];
+const ALLOWED_INPUT_TYPES = ['HANDLE', 'URL', 'SMS_TEXT'];
 
 // Inflation Maps for minified schema
 const HISTORY_TYPE_MAP: Record<number, string> = {
@@ -16,23 +18,153 @@ const HISTORY_TYPE_MAP: Record<number, string> = {
 const SENTIMENT_MAP: Record<number, string> = { 0: "POSITIVE", 1: "NEGATIVE", 2: "NEUTRAL" };
 const ENGAGEMENT_MAP: Record<number, string> = { 0: "ORGANIC", 1: "MIXED", 2: "SUSPICIOUS", 3: "BOT_HEAVY" };
 const IDENTITY_MAP: Record<number, string> = { 0: "UNKNOWN_ENTITY", 1: "VERIFIED_INFLUENCER", 2: "IMPERSONATOR", 3: "OFFICIAL_PROJECT" };
+const RISK_LEVEL_MAP: Record<number, string> = { 0: "CRITICAL", 1: "WARNING", 2: "INFO" };
+const ACTION_TYPE_MAP: Record<number, string> = { 0: "CALL_165", 1: "BLOCK", 2: "OFFICIAL_CHANNEL", 3: "REPORT", 4: "VERIFY", 5: "IGNORE" };
 
 /**
- * Sanitize handle input - remove @ prefix and validate format
+ * Detect input type from content
  */
-const sanitizeHandle = (handle: string): string | null => {
-  if (!handle || typeof handle !== 'string') return null;
+const detectInputType = (input: string): 'HANDLE' | 'URL' | 'SMS_TEXT' => {
+  const trimmed = input.trim();
 
-  // Remove @ prefix if present
-  let sanitized = handle.trim().replace(/^@/, '');
+  // Check if it's a URL
+  if (/^https?:\/\//i.test(trimmed) || /^www\./i.test(trimmed)) {
+    return 'URL';
+  }
 
-  // Check length
-  if (sanitized.length === 0 || sanitized.length > MAX_HANDLE_LENGTH) return null;
+  // Check if it looks like a Twitter handle (alphanumeric + underscores, optionally with @)
+  const handlePattern = /^@?[a-zA-Z0-9_]{1,50}$/;
+  if (handlePattern.test(trimmed)) {
+    return 'HANDLE';
+  }
 
-  // Allow only alphanumeric, underscores (Twitter-like handles)
-  if (!/^[a-zA-Z0-9_]+$/.test(sanitized)) return null;
+  // Otherwise, treat as SMS/text content
+  return 'SMS_TEXT';
+};
 
-  return sanitized.toLowerCase();
+/**
+ * Sanitize and validate input based on type
+ */
+const sanitizeInput = (input: string, inputType: 'HANDLE' | 'URL' | 'SMS_TEXT'): string | null => {
+  if (!input || typeof input !== 'string') return null;
+
+  const trimmed = input.trim();
+
+  switch (inputType) {
+    case 'HANDLE':
+      // Remove @ prefix and validate
+      let sanitized = trimmed.replace(/^@/, '');
+      if (sanitized.length === 0 || sanitized.length > MAX_HANDLE_LENGTH) return null;
+      if (!/^[a-zA-Z0-9_]+$/.test(sanitized)) return null;
+      return sanitized.toLowerCase();
+
+    case 'URL':
+      // Basic URL validation
+      if (trimmed.length > MAX_INPUT_LENGTH) return null;
+      try {
+        const urlStr = trimmed.startsWith('www.') ? `https://${trimmed}` : trimmed;
+        new URL(urlStr);
+        return urlStr;
+      } catch {
+        return null;
+      }
+
+    case 'SMS_TEXT':
+      // Validate text length and sanitize
+      if (trimmed.length === 0 || trimmed.length > MAX_INPUT_LENGTH) return null;
+      // Basic sanitization - remove control characters
+      return trimmed.replace(/[\x00-\x1F\x7F]/g, '');
+
+    default:
+      return null;
+  }
+};
+
+/**
+ * Generate cache key for different input types
+ */
+const generateCacheKey = (input: string, inputType: string): string => {
+  // Create a short hash for URLs and SMS text
+  if (inputType === 'URL' || inputType === 'SMS_TEXT') {
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      const char = input.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return `${inputType.toLowerCase()}-${Math.abs(hash).toString(36)}`;
+  }
+  // For handles, use the handle directly
+  return input.toLowerCase();
+};
+
+/**
+ * Generate suggested actions based on risk score and signals
+ */
+const generateActions = (scamProbability: number, riskSignals: any[], language: string): any[] => {
+  const actions: any[] = [];
+
+  if (scamProbability >= 70) {
+    // High risk - recommend calling 165 and blocking
+    actions.push({
+      label: language === 'zh-TW' ? '📞 撥打 165 反詐騙專線' : '📞 Call 165 Anti-Fraud Hotline',
+      actionUrl: 'tel:165',
+      type: 'CALL_165',
+      priority: 1
+    });
+    actions.push({
+      label: language === 'zh-TW' ? '🚫 封鎖此聯絡人' : '🚫 Block This Contact',
+      type: 'BLOCK',
+      priority: 2
+    });
+    actions.push({
+      label: language === 'zh-TW' ? '📋 向警政署檢舉' : '📋 Report to Police',
+      actionUrl: 'https://165.npa.gov.tw/',
+      type: 'REPORT',
+      priority: 3
+    });
+  } else if (scamProbability >= 40) {
+    // Medium risk - recommend verification
+    actions.push({
+      label: language === 'zh-TW' ? '✅ 透過官方管道驗證' : '✅ Verify via Official Channel',
+      type: 'OFFICIAL_CHANNEL',
+      priority: 1
+    });
+    actions.push({
+      label: language === 'zh-TW' ? '📋 回報可疑訊息' : '📋 Report Suspicious Message',
+      actionUrl: 'https://165.npa.gov.tw/',
+      type: 'REPORT',
+      priority: 2
+    });
+  } else {
+    // Low risk
+    actions.push({
+      label: language === 'zh-TW' ? '✅ 看起來安全，但請保持警覺' : '✅ Appears Safe, Stay Vigilant',
+      type: 'VERIFY',
+      priority: 1
+    });
+  }
+
+  return actions;
+};
+
+/**
+ * Generate senior-friendly verdict
+ */
+const generateSeniorVerdict = (scamProbability: number, language: string): string => {
+  if (scamProbability >= 70) {
+    return language === 'zh-TW'
+      ? '⚠️ 這很可能是詐騙！請不要匯款或提供個人資料。建議撥打 165 諮詢。'
+      : '⚠️ This is likely a SCAM! Do NOT send money or personal info. Call 165 for help.';
+  } else if (scamProbability >= 40) {
+    return language === 'zh-TW'
+      ? '⚠️ 這有一些可疑跡象。請先向官方確認後再行動。'
+      : '⚠️ This has some suspicious signs. Please verify with official sources first.';
+  } else {
+    return language === 'zh-TW'
+      ? '✅ 目前看起來還好，但請繼續保持警覺。'
+      : '✅ Looks okay for now, but stay alert.';
+  }
 };
 
 /**
@@ -170,8 +302,8 @@ const checkRateLimit = async (ip: string): Promise<{ allowed: boolean; remaining
 /**
  * Build cache file path for Vercel Blob
  */
-const buildCachePath = (handle: string, language: string): string => {
-  return `cache/${handle.toLowerCase()}-${language}.json`;
+const buildCachePath = (cacheKey: string, language: string): string => {
+  return `cache/${cacheKey}-${language}.json`;
 };
 
 /**
@@ -247,24 +379,45 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { handle: rawHandle, language: rawLanguage, forceRefresh } = req.body;
+    const { handle: rawHandle, input: rawInput, inputType: rawInputType, language: rawLanguage, forceRefresh } = req.body;
 
-    // === INPUT VALIDATION ===
-
-    // Validate and sanitize handle
-    const handle = sanitizeHandle(rawHandle);
-    if (!handle) {
+    // === INPUT VALIDATION (Support both legacy 'handle' and new 'input' field) ===
+    const inputContent = rawInput || rawHandle;
+    if (!inputContent) {
       return res.status(400).json({
-        error: 'Invalid handle format. Use alphanumeric characters and underscores only (max 50 chars).'
+        error: 'Missing input. Please provide a Twitter handle, URL, or SMS text.'
       });
     }
+
+    // Detect input type if not provided
+    const detectedType = rawInputType && ALLOWED_INPUT_TYPES.includes(rawInputType)
+      ? rawInputType
+      : detectInputType(inputContent);
+
+    // Sanitize input based on type
+    const sanitizedInput = sanitizeInput(inputContent, detectedType);
+    if (!sanitizedInput) {
+      return res.status(400).json({
+        error: detectedType === 'HANDLE'
+          ? 'Invalid handle format. Use alphanumeric characters and underscores only (max 50 chars).'
+          : detectedType === 'URL'
+          ? 'Invalid URL format. Please provide a valid URL.'
+          : 'Invalid input. Text must be between 1 and 2000 characters.'
+      });
+    }
+
+    // For backward compatibility, set handle for HANDLE type
+    const handle = detectedType === 'HANDLE' ? sanitizedInput : '';
 
     // Validate language
     const language = ALLOWED_LANGUAGES.includes(rawLanguage) ? rawLanguage : 'en';
 
+    // Generate cache key
+    const cacheKey = generateCacheKey(sanitizedInput, detectedType);
+
     // === CACHE CHECK (no rate limit for cache hits) ===
     if (!forceRefresh) {
-      const cached = await getCachedAnalysis(handle, language);
+      const cached = await getCachedAnalysis(cacheKey, language);
       if (cached) {
         // Normalize old cached data to new schema (backward compatibility)
         const normalizedCache = {
@@ -272,6 +425,11 @@ export default async function handler(req: any, res: any) {
           // Ensure new required fields exist with defaults
           credibilityStrengths: cached.data.credibilityStrengths || [],
           riskFactors: cached.data.riskFactors || [],
+          riskSignals: cached.data.riskSignals || [],
+          suggestedActions: cached.data.suggestedActions || [],
+          inputType: cached.data.inputType || detectedType,
+          originalInput: cached.data.originalInput || sanitizedInput,
+          scamProbability: cached.data.scamProbability ?? cached.data.trustScore ? (100 - cached.data.trustScore) : 50,
         };
         // Remove deprecated fields from old cache
         delete normalizedCache.totalWins;
@@ -280,7 +438,7 @@ export default async function handler(req: any, res: any) {
 
         return res.status(200).json({
           ...normalizedCache,
-          handle,
+          handle: handle || normalizedCache.handle || '',
           source: 'cache',
           cachedAt: cached.cachedAt
         });
@@ -305,30 +463,132 @@ export default async function handler(req: any, res: any) {
     // === CALL GEMINI API ===
     const ai = new GoogleGenAI({ apiKey });
 
-    // Prompt with schema as text (responseSchema not supported with Search tool)
-    const prompt = `
-TASK: Detailed background check on Crypto Influencer "${handle}".
-LANGUAGE: ${language === 'zh-TW' ? 'Traditional Chinese' : 'English'}.
+    // Build prompt based on input type
+    const buildPrompt = () => {
+      const langInstruction = language === 'zh-TW' ? 'Traditional Chinese' : 'English';
+
+      // Common scam detection instructions
+      const scamDetectionInstructions = `
+SCAM DETECTION CRITERIA (check for these red flags):
+- 保證獲利/Guaranteed returns: Promises of fixed high returns (e.g., "guaranteed 30% monthly")
+- 壓力催促/Pressure tactics: Urgency language (e.g., "limited time", "act now", "last chance")
+- 冒充官方/Impersonation: Fake official accounts, copied logos, similar-looking URLs
+- 不明入金/Suspicious payments: Requests for crypto transfers, gift cards, or wire transfers
+- 假冒名人/Celebrity impersonation: Using famous names to build false trust
+- 龐氏特徵/Ponzi signs: Referral bonuses, multi-level structures
+- 釣魚連結/Phishing: Suspicious URLs, URL shorteners, typosquatting domains
+`;
+
+      if (detectedType === 'HANDLE') {
+        return `
+TASK: 執行「防詐識別分析」- Crypto Influencer Background Check
+ANALYSIS TARGET: Twitter/X Handle "@${sanitizedInput}"
+LANGUAGE: ${langInstruction}
 
 INSTRUCTIONS:
-1. Use Google Search to find history, controversies, and track records.
-2. Search for: "ZachXBT ${handle}", "Coffeezilla ${handle}", "Reddit r/CryptoCurrency ${handle}", "${handle} rug pull", "${handle} scam", "${handle} paid promo".
-3. SCORE: 0(Scam)-100(Trusted). <20: Fraud. 20-40: Shiller. 40-60: Unknown. >80: Leader.
-4. Output the result in JSON format ONLY. Do not include any text before or after the JSON.
+1. Use Google Search to research this account's history, controversies, and track record.
+2. Search for: "ZachXBT ${sanitizedInput}", "Coffeezilla ${sanitizedInput}", "Reddit r/CryptoCurrency ${sanitizedInput}", "${sanitizedInput} rug pull", "${sanitizedInput} scam", "${sanitizedInput} paid promo", "165 ${sanitizedInput}".
+3. Check if this account has been flagged by Taiwan's 165 anti-fraud hotline or international scam databases.
+${scamDetectionInstructions}
 
-JSON SCHEMA (use these exact field names):
+SCORING:
+- trustScore: 0(Scam)-100(Trusted). <20: Confirmed Fraud. 20-40: High Risk. 40-60: Unknown/Caution. >80: Trusted.
+- scamProbability: Inverse of trustScore adjusted for scam signals. High if multiple red flags found.
+
+OUTPUT JSON ONLY:
 {
   "d": "Display Name",
   "b": "Short Bio (max 15 words)",
   "s": 0-3 (0=Unknown, 1=Verified Influencer, 2=Impersonator, 3=Official Project),
   "ts": Trust Score (0-100),
+  "sp": Scam Probability (0-100),
   "v": "One sentence verdict",
   "eq": 0-3 (0=Organic, 1=Mixed, 2=Suspicious, 3=BotHeavy),
   "c": ["Credibility Strengths array"],
   "r": ["Risk Factors array"],
+  "rs": [{"t": "Signal Type", "e": "Evidence description", "l": 0-2 (0=CRITICAL, 1=WARNING, 2=INFO)}],
   "h": [{"dt": "YYYY-MM-DD", "e": "Event Title", "t": 0-5 (0=Win,1=Loss,2=Controversy,3=News,4=Scam,5=Investigation), "tk": "Token symbol or null", "s": 0-2 (0=Positive,1=Negative,2=Neutral), "x": "Details"}]
 }
 `;
+      } else if (detectedType === 'URL') {
+        return `
+TASK: 執行「防詐識別分析」- Suspicious URL Analysis
+ANALYSIS TARGET: URL "${sanitizedInput}"
+LANGUAGE: ${langInstruction}
+
+INSTRUCTIONS:
+1. Use Google Search to research this URL/domain.
+2. Search for: "${sanitizedInput} scam", "${sanitizedInput} fraud", "${sanitizedInput} 詐騙", "site:165.npa.gov.tw ${new URL(sanitizedInput).hostname}", "${new URL(sanitizedInput).hostname} phishing".
+3. Check if this domain is on blocklists, reported as phishing, or associated with scams.
+4. Analyze the URL structure for suspicious patterns (typosquatting, misleading subdomains, etc.)
+${scamDetectionInstructions}
+
+SCORING:
+- trustScore: 0(Dangerous)-100(Safe). <20: Confirmed Scam Site. 20-40: High Risk. 40-60: Suspicious. >80: Likely Safe.
+- scamProbability: Based on domain reputation, URL patterns, and search results.
+
+OUTPUT JSON ONLY:
+{
+  "d": "Website/Service Name",
+  "b": "What this URL appears to be (max 15 words)",
+  "s": 0-3 (0=Unknown, 1=Legitimate Service, 2=Impersonator/Phishing, 3=Official),
+  "ts": Trust Score (0-100),
+  "sp": Scam Probability (0-100),
+  "v": "One sentence verdict about this URL's safety",
+  "eq": 0-3 (0=Legitimate, 1=Questionable, 2=Suspicious, 3=Malicious),
+  "c": ["Reasons this might be legitimate"],
+  "r": ["Warning signs and risks"],
+  "rs": [{"t": "Signal Type (e.g., PHISHING_URL, TYPOSQUATTING, KNOWN_SCAM)", "e": "Evidence", "l": 0-2}],
+  "h": [{"dt": "YYYY-MM-DD", "e": "Report/Incident", "t": 0-5, "tk": null, "s": 0-2, "x": "Details"}]
+}
+`;
+      } else {
+        // SMS_TEXT
+        return `
+TASK: 執行「防詐識別分析」- Suspicious Message Analysis
+ANALYSIS TARGET: Message Content:
+"""
+${sanitizedInput}
+"""
+LANGUAGE: ${langInstruction}
+
+INSTRUCTIONS:
+1. Analyze this message for common scam patterns.
+2. If it contains URLs or phone numbers, research them.
+3. Check for language patterns commonly used in Taiwan/Asia scams (investment scams, romance scams, impersonation).
+4. Search for: any phone numbers or URLs in the message, common scam phrases used.
+${scamDetectionInstructions}
+
+SPECIFIC SCAM TYPES TO CHECK:
+- 假投資/Fake Investment: "老師帶單", "穩賺不賠", "內線消息"
+- 假交友/Romance Scam: Sudden intimacy, requests for money/crypto
+- 假網購/Fake Shopping: Too-good-to-be-true prices, suspicious payment methods
+- 假冒機構/Impersonation: Banks, government, delivery companies
+- 中獎詐騙/Prize Scam: "恭喜中獎", requires fees to claim
+
+SCORING:
+- trustScore: 0(Scam)-100(Legitimate). <20: Confirmed Scam Pattern. 20-40: High Risk. 40-60: Suspicious. >80: Likely OK.
+- scamProbability: Based on message content analysis and known scam patterns.
+
+OUTPUT JSON ONLY:
+{
+  "d": "Sender/Source (if identifiable)",
+  "b": "Message type summary (max 15 words)",
+  "s": 0-3 (0=Unknown Source, 1=Likely Legitimate, 2=Likely Scammer, 3=Verified Source),
+  "ts": Trust Score (0-100),
+  "sp": Scam Probability (0-100),
+  "v": "One sentence verdict - is this message safe?",
+  "eq": 0-3 (0=Normal, 1=Questionable, 2=Suspicious, 3=Scam Pattern),
+  "c": ["Reasons this might be legitimate"],
+  "r": ["Warning signs found in message"],
+  "rs": [{"t": "Signal Type (e.g., GUARANTEED_RETURNS, PRESSURE_TACTICS, IMPERSONATION)", "e": "Exact quote or evidence from message", "l": 0-2}],
+  "h": []
+}
+`;
+      }
+    };
+
+    const prompt = buildPrompt();
 
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
@@ -353,9 +613,24 @@ JSON SCHEMA (use these exact field names):
 
     // === INFLATE MINIFIED DATA TO FULL SCHEMA ===
     // Convert minified API response back to full UI-compatible format
+
+    // Calculate scam probability (use sp from response or derive from trustScore)
+    const scamProbability = minData.sp ?? (100 - (minData.ts ?? 50));
+
+    // Parse risk signals
+    const riskSignals = (minData.rs || []).map((signal: any) => ({
+      type: signal.t || 'UNKNOWN',
+      evidence: signal.e || '',
+      level: RISK_LEVEL_MAP[signal.l] || 'INFO'
+    }));
+
+    // Generate actions based on scam probability
+    const suggestedActions = generateActions(scamProbability, riskSignals, language);
+
     const fullData: any = {
-      handle,
-      displayName: minData.d || handle,
+      // Legacy handle field for backward compatibility
+      handle: handle || sanitizedInput,
+      displayName: minData.d || handle || sanitizedInput,
       bioSummary: minData.b || "No bio available",
       identityStatus: IDENTITY_MAP[minData.s] || "UNKNOWN_ENTITY",
       trustScore: minData.ts ?? 50,
@@ -373,6 +648,15 @@ JSON SCHEMA (use these exact field names):
         details: item.x,
         sourceUrl: undefined
       })),
+
+      // === TruthGuard AI New Fields ===
+      inputType: detectedType,
+      originalInput: sanitizedInput,
+      scamProbability,
+      riskSignals,
+      suggestedActions,
+      seniorModeVerdict: generateSeniorVerdict(scamProbability, language),
+
       // UI flow compatibility fields
       searchQueries: searchQueries.length > 0 ? searchQueries : undefined,
       groundedSearch: (groundingChunks?.length || 0) > 0,
@@ -399,6 +683,7 @@ JSON SCHEMA (use these exact field names):
       (!Array.isArray(fullData.history) || fullData.history.length === 0)
     ) {
       fullData.trustScore = 50;
+      fullData.scamProbability = 50;
       fullData.credibilityStrengths = [];
       fullData.riskFactors = [
         language === 'zh-TW'
@@ -406,12 +691,27 @@ JSON SCHEMA (use these exact field names):
           : 'Insufficient public information for complete assessment'
       ];
 
+      // Add a generic risk signal for low evidence
+      fullData.riskSignals = [{
+        type: 'INSUFFICIENT_DATA',
+        evidence: language === 'zh-TW'
+          ? '無法找到足夠的公開資訊來驗證此內容'
+          : 'Unable to find sufficient public information to verify this content',
+        level: 'WARNING'
+      }];
+
+      // Update suggested actions for uncertain case
+      fullData.suggestedActions = generateActions(50, fullData.riskSignals, language);
+      fullData.seniorModeVerdict = generateSeniorVerdict(50, language);
+
+      const displayIdentifier = fullData.displayName || handle || sanitizedInput;
+
       // If model didn't give a meaningful bio, provide a safe default
       if (!fullData.bioSummary || !fullData.bioSummary.trim() || fullData.bioSummary === "No bio available") {
         fullData.bioSummary =
           language === 'zh-TW'
-            ? `目前缺乏足夠的公開資訊，無法為 ${fullData.displayName || handle} 建立詳細的加密貨幣相關介紹。`
-            : `There is currently not enough public information to build a detailed crypto-related bio for ${fullData.displayName || handle}.`;
+            ? `目前缺乏足夠的公開資訊，無法為 ${displayIdentifier} 建立詳細的介紹。`
+            : `There is currently not enough public information to build a detailed profile for ${displayIdentifier}.`;
       }
 
       fullData.verdict =
@@ -425,22 +725,22 @@ JSON SCHEMA (use these exact field names):
           date: 'Recent',
           description:
             language === 'zh-TW'
-              ? `缺乏足夠的公開證據評估 ${fullData.displayName || handle} 的加密貨幣相關聲譽`
-              : `Insufficient public evidence to evaluate ${fullData.displayName || handle}'s crypto-related reputation`,
+              ? `缺乏足夠的公開證據評估 ${displayIdentifier}`
+              : `Insufficient public evidence to evaluate ${displayIdentifier}`,
           type: 'NEUTRAL_NEWS',
           token: undefined,
           sentiment: 'NEUTRAL',
           details:
             language === 'zh-TW'
-              ? '在 ZachXBT、Coffeezilla 或 Reddit 等主要風險來源中，尚未找到與此帳號有明確關聯的正面或負面報導。建議觀察其後續發文、贊助揭露與社群互動再做判斷。'
-              : 'No strong positive or negative evidence was found in major risk sources (e.g. ZachXBT, Coffeezilla, Reddit). Consider monitoring future posts, sponsorship disclosures, and community interactions before making decisions.',
+              ? '在主要風險來源中，尚未找到明確關聯的正面或負面報導。建議保持警覺，如有疑慮可撥打 165 諮詢。'
+              : 'No strong positive or negative evidence was found in major risk sources. Stay vigilant and call 165 if you have concerns.',
           sourceUrl: undefined,
         },
       ];
     }
 
     // Save to cache (async, don't wait)
-    setCachedAnalysis(handle, language, fullData);
+    setCachedAnalysis(cacheKey, language, fullData);
 
     return res.status(200).json({
       ...fullData,
