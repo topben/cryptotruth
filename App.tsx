@@ -21,6 +21,7 @@ const UI_TEXT = {
     hero: {
       title: 'Verify Before You',
       titleHighlight: 'Trust',
+      subtitle: 'Crypto · Truth · News',
       description: 'AI-powered scam detection. Check suspicious messages, links, and accounts instantly.',
       descriptionSenior: 'Got a suspicious message? Paste it here and we\'ll tell you if it\'s safe!'
     },
@@ -88,6 +89,7 @@ const UI_TEXT = {
     hero: {
       title: '信任前，先',
       titleHighlight: '驗證',
+      subtitle: '加密 · 真相 · 新聞',
       description: 'AI 驅動的防詐偵測。即時檢查可疑訊息、連結和帳號。',
       descriptionSenior: '收到可疑訊息？貼上來讓我們幫您檢查是否安全！'
     },
@@ -302,6 +304,9 @@ const App: React.FC = () => {
                 <h1 className={`font-display font-bold text-white mb-4 ${seniorModeStyles.heading}`}>
                     {t.hero.title} <span className="text-transparent bg-clip-text bg-gradient-to-r from-crypto-accent to-blue-500">{t.hero.titleHighlight}</span>
                 </h1>
+                <p className={`text-crypto-accent font-display tracking-widest uppercase mb-3 ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>
+                    {t.hero.subtitle}
+                </p>
                 <p className={`text-gray-400 max-w-2xl mx-auto ${seniorModeStyles.text}`}>
                     {isSeniorMode ? t.hero.descriptionSenior : t.hero.description}
                 </p>
