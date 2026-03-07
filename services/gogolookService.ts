@@ -135,13 +135,15 @@ export const extractPhoneNumbers = (
 export const summarizeUrlResult = (url: string, result: any): string => {
   if (!result) return '';
   const lines = [`SCAMADVISER DATA for "${url}":`];
-  if (result.trust_score !== undefined) lines.push(`- Trust Score: ${result.trust_score}/100`);
-  if (result.domain_age !== undefined) lines.push(`- Domain Age: ${result.domain_age}`);
-  if (result.country) lines.push(`- Registrant Country: ${result.country}`);
-  if (result.on_blocklists !== undefined) lines.push(`- On Blocklists: ${result.on_blocklists}`);
-  if (result.ssl_valid !== undefined) lines.push(`- SSL Valid: ${result.ssl_valid}`);
-  if (result.phishing !== undefined) lines.push(`- Phishing Flag: ${result.phishing}`);
-  if (result.malware !== undefined) lines.push(`- Malware Flag: ${result.malware}`);
+  // Actual field name from ScamAdviser API is "score" (verified via live API test)
+  if (result.score !== undefined) lines.push(`- Trust Score: ${result.score}/100`);
+  if (result.blacklisted !== undefined) lines.push(`- Blacklisted: ${result.blacklisted}`);
+  if (result.is_offline !== undefined) lines.push(`- Is Offline: ${result.is_offline}`);
+  if (result.ssl?.valid !== undefined) lines.push(`- SSL Valid: ${result.ssl.valid}`);
+  if (result.whois?.registrant?.country) lines.push(`- Registrant Country: ${result.whois.registrant.country}`);
+  if (result.whois?.registration_created) lines.push(`- Domain Created: ${result.whois.registration_created}`);
+  if (result.antiphishing?.count !== undefined && result.antiphishing.count > 0)
+    lines.push(`- Anti-Phishing Reports: ${result.antiphishing.count}`);
   // Fallback: if none of the known fields matched, include raw (truncated)
   if (lines.length === 1) {
     const raw = JSON.stringify(result);
