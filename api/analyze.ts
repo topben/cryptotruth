@@ -626,6 +626,12 @@ INSTRUCTIONS:
 5. Incorporate the external ScamAdviser data provided above into your scoring.
 ${scamDetectionInstructions}
 
+CRITICAL RULE FOR RISK SIGNALS:
+- Only add a risk signal ("rs") if there is DIRECT evidence that THIS SPECIFIC URL/domain is dangerous.
+- Do NOT add risk signals for general warnings like "scammers may impersonate this brand" or "phishing emails may mimic this service" — those are generic internet safety tips, not evidence against this URL.
+- A risk signal must be something specific found about this exact domain (e.g., it is on a blocklist, it has been reported as phishing, it has a typosquatted domain name, it was flagged by Taiwan's 165 hotline).
+- If the domain is clearly legitimate and well-established, "rs" should be an empty array [].
+
 SCORING:
 - trustScore: 0(Dangerous)-100(Safe). <20: Confirmed Scam Site. 20-40: High Risk. 40-60: Suspicious. >80: Likely Safe.
 - scamProbability: Based on domain reputation, URL patterns, ScamAdviser data, and search results.
@@ -641,7 +647,7 @@ OUTPUT JSON ONLY:
   "eq": 0-3 (0=Legitimate, 1=Questionable, 2=Suspicious, 3=Malicious),
   "c": ["Reasons this might be legitimate"],
   "r": ["Warning signs and risks"],
-  "rs": [{"t": "Signal Type (e.g., PHISHING_URL, TYPOSQUATTING, KNOWN_SCAM)", "e": "Evidence", "l": 0-2}],
+  "rs": [{"t": "Signal Type (e.g., PHISHING_URL, TYPOSQUATTING, KNOWN_SCAM)", "e": "Direct evidence about this specific URL", "l": 0-2}],
   "h": [{"dt": "YYYY-MM-DD", "e": "Report/Incident", "t": 0-5, "tk": null, "s": 0-2, "x": "Details"}]
 }
 `;
@@ -767,6 +773,13 @@ OUTPUT JSON ONLY:
       lastAnalyzed: new Date().toISOString(),
       followersCount: undefined // Explicitly undefined to respect types
     };
+
+    // === HIGH-TRUST SIGNAL FILTER (URL only) ===
+    // For well-established URLs (trustScore > 80), suppress generic WARNING/INFO risk signals
+    // that are not specific evidence against this URL (e.g. "scammers may impersonate this brand").
+    if (detectedType === 'URL' && fullData.trustScore > 80) {
+      fullData.riskSignals = fullData.riskSignals.filter((s: any) => s.level === 'CRITICAL');
+    }
 
     // === LOW VISIBILITY PENALTY LOGIC ===
     // If identity status is UNKNOWN_ENTITY (s=0), cap trust score and add risk factor
