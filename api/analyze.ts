@@ -567,7 +567,9 @@ export default async function handler(req: any, res: any) {
 
     // Build prompt based on input type
     const buildPrompt = () => {
-      const langInstruction = language === 'zh-TW' ? 'Traditional Chinese' : 'English';
+      const langInstruction = language === 'zh-TW'
+        ? 'Traditional Chinese (繁體中文). You MUST write ALL output text fields — including "d", "b", "v", "c" array items, "r" array items, "rs[].e" evidence strings, and "h[].x" detail strings — entirely in Traditional Chinese (繁體中文). Do not use English in any text field.'
+        : 'English. Write all output text fields in English.';
 
       // Common scam detection instructions
       const scamDetectionInstructions = `
@@ -775,10 +777,18 @@ OUTPUT JSON ONLY:
     };
 
     // === HIGH-TRUST SIGNAL FILTER (URL only) ===
-    // For well-established URLs (trustScore > 80), suppress generic WARNING/INFO risk signals
-    // that are not specific evidence against this URL (e.g. "scammers may impersonate this brand").
+    // For well-established URLs (trustScore > 80), suppress generic risk factors and
+    // WARNING/INFO risk signals that are not direct evidence against this URL
+    // (e.g. "scammers may impersonate this brand" on google.com).
     if (detectedType === 'URL' && fullData.trustScore > 80) {
       fullData.riskSignals = fullData.riskSignals.filter((s: any) => s.level === 'CRITICAL');
+      fullData.riskFactors = fullData.riskFactors.filter((r: string) => {
+        const lower = r.toLowerCase();
+        // Remove generic impersonation warnings that aren't about this specific URL
+        return !lower.includes('scammer') && !lower.includes('phishing email') &&
+               !lower.includes('may try') && !lower.includes('may impersonate') &&
+               !lower.includes('be wary') && !lower.includes('be cautious');
+      });
     }
 
     // === LOW VISIBILITY PENALTY LOGIC ===
