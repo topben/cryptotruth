@@ -256,12 +256,12 @@ const App: React.FC = () => {
       {/* Header */}
       <header className={`sticky top-0 z-50 backdrop-blur-md bg-crypto-dark/80 border-b border-gray-800 ${isSeniorMode ? 'py-2' : ''}`}>
         <div className={`container mx-auto px-4 flex items-center justify-between ${isSeniorMode ? 'h-20' : 'h-16'}`}>
-          <div className="flex items-center gap-2">
+          <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <ShieldAlert className={`text-crypto-accent ${isSeniorMode ? 'w-8 h-8' : 'w-6 h-6'}`} />
             <span className={`font-display font-bold tracking-tight text-white ${isSeniorMode ? 'text-2xl' : 'text-xl'}`}>
               {t.appName}<span className="text-crypto-accent">{t.appNameHighlight}</span>
             </span>
-          </div>
+          </a>
           <div className="flex items-center gap-3">
             {/* Senior Mode Toggle */}
             <button
