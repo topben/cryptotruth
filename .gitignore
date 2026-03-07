@@ -39,3 +39,6 @@ Thumbs.db
 
 # Debug
 *.pem
+
+# Competition materials (local only)
+給參賽者的資料/
