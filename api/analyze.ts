@@ -7,7 +7,7 @@ import {
   extractPhoneNumbers,
   summarizeUrlResult,
   summarizeNumberResult,
-} from "../services/gogolookService";
+} from "../services/gogolookService.js";
 import {
   checkUrlAgainstDataset,
   analyzeSmsText,
@@ -16,7 +16,7 @@ import {
   maskPII,
   LOAN_SCAM_SMS_EXAMPLES,
   ACCOUNT_ALERT_SMS_EXAMPLES,
-} from "../services/scamDatasets";
+} from "../services/scamDatasets.js";
 
 // Configuration
 const CACHE_DURATION_MS = 72 * 60 * 60 * 1000; // 72 hours
