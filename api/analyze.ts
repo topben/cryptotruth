@@ -25,7 +25,7 @@ const MAX_REQUESTS_PER_WINDOW = 10; // Max 10 API calls per IP per hour
 const MAX_HANDLE_LENGTH = 50;
 const MAX_INPUT_LENGTH = 2000; // Max length for URL or SMS text
 const ALLOWED_LANGUAGES = ['en', 'zh-TW'];
-const ALLOWED_INPUT_TYPES = ['HANDLE', 'URL', 'SMS_TEXT'];
+const ALLOWED_INPUT_TYPES = ['HANDLE', 'URL', 'SMS_TEXT', 'PHONE'];
 
 // Inflation Maps for minified schema
 const HISTORY_TYPE_MAP: Record<number, string> = {
@@ -41,12 +41,17 @@ const ACTION_TYPE_MAP: Record<number, string> = { 0: "CALL_165", 1: "BLOCK", 2: 
 /**
  * Detect input type from content
  */
-const detectInputType = (input: string): 'HANDLE' | 'URL' | 'SMS_TEXT' => {
+const detectInputType = (input: string): 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE' => {
   const trimmed = input.trim();
 
   // Check if it's a URL
   if (/^https?:\/\//i.test(trimmed) || /^www\./i.test(trimmed)) {
     return 'URL';
+  }
+
+  // Check if it looks like a phone number (E.164 international or Taiwan local 09xx)
+  if (/^\+\d{7,15}$/.test(trimmed.replace(/[\s\-().]/g, '')) || /^0[89]\d{8}$/.test(trimmed.replace(/[\s\-]/g, ''))) {
+    return 'PHONE';
   }
 
   // Check if it looks like a Twitter handle (alphanumeric + underscores, optionally with @)
@@ -62,7 +67,7 @@ const detectInputType = (input: string): 'HANDLE' | 'URL' | 'SMS_TEXT' => {
 /**
  * Sanitize and validate input based on type
  */
-const sanitizeInput = (input: string, inputType: 'HANDLE' | 'URL' | 'SMS_TEXT'): string | null => {
+const sanitizeInput = (input: string, inputType: 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE'): string | null => {
   if (!input || typeof input !== 'string') return null;
 
   const trimmed = input.trim();
@@ -92,6 +97,18 @@ const sanitizeInput = (input: string, inputType: 'HANDLE' | 'URL' | 'SMS_TEXT'):
       // Basic sanitization - remove control characters
       return trimmed.replace(/[\x00-\x1F\x7F]/g, '');
 
+    case 'PHONE': {
+      // Normalize phone number: strip spaces, dashes, parens
+      const digits = trimmed.replace(/[\s\-().]/g, '');
+      // E.164 international format: +[1-3 digit country code][number]
+      if (/^\+\d{7,15}$/.test(digits)) return digits;
+      // Taiwan local mobile 09xxxxxxxx → +8869xxxxxxxx
+      if (/^09\d{8}$/.test(digits)) return `+886${digits.slice(1)}`;
+      // Taiwan local landline 0x-xxxxxxxx
+      if (/^0[2-8]\d{7,8}$/.test(digits)) return `+886${digits.slice(1)}`;
+      return null;
+    }
+
     default:
       return null;
   }
@@ -110,6 +127,10 @@ const generateCacheKey = (input: string, inputType: string): string => {
       hash = hash & hash;
     }
     return `${inputType.toLowerCase()}-${Math.abs(hash).toString(36)}`;
+  }
+  // For phone numbers, use the normalized E.164 number as key
+  if (inputType === 'PHONE') {
+    return `phone-${input.replace(/\+/g, '')}`;
   }
   // For handles, use the handle directly
   return input.toLowerCase();
@@ -459,6 +480,13 @@ const fetchExternalContext = async (input: string, inputType: string): Promise<s
       const result = await checkNumber(country, number);
       if (result) sections.push(summarizeNumberResult(number, result));
     }
+
+  } else if (inputType === 'PHONE') {
+    // Direct phone number check via Whoscall
+    const phones = extractPhoneNumbers(input);
+    const target = phones.length > 0 ? phones[0] : { country: 'TW', number: input };
+    const result = await checkNumber(target.country, target.number);
+    if (result) sections.push(summarizeNumberResult(target.number, result));
   }
 
   if (sections.length === 0) return '';
@@ -501,6 +529,8 @@ export default async function handler(req: any, res: any) {
           ? 'Invalid handle format. Use alphanumeric characters and underscores only (max 50 chars).'
           : detectedType === 'URL'
           ? 'Invalid URL format. Please provide a valid URL.'
+          : detectedType === 'PHONE'
+          ? 'Invalid phone number. Use E.164 format (e.g. +886912345678) or Taiwan local format (0912345678).'
           : 'Invalid input. Text must be between 1 and 2000 characters.'
       });
     }
@@ -651,6 +681,45 @@ OUTPUT JSON ONLY:
   "r": ["Warning signs and risks"],
   "rs": [{"t": "Signal Type (e.g., PHISHING_URL, TYPOSQUATTING, KNOWN_SCAM)", "e": "Direct evidence about this specific URL", "l": 0-2}],
   "h": [{"dt": "YYYY-MM-DD", "e": "Report/Incident", "t": 0-5, "tk": null, "s": 0-2, "x": "Details"}]
+}
+`;
+      } else if (detectedType === 'PHONE') {
+        return `
+TASK: 執行「防詐識別分析」- Phone Number Reputation Check
+ANALYSIS TARGET: Phone Number "${sanitizedInput}"
+LANGUAGE: ${langInstruction}
+${externalContext}
+INSTRUCTIONS:
+1. Use Google Search to research this phone number's reputation.
+2. Search for: "${sanitizedInput} scam", "${sanitizedInput} 詐騙", "${sanitizedInput} 詐欺", "${sanitizedInput} spam", "165 ${sanitizedInput}".
+3. Check if this number has been reported to Taiwan's 165 anti-fraud hotline or international scam databases.
+4. Incorporate the Whoscall data provided above into your scoring.
+${scamDetectionInstructions}
+
+PHONE SCAM TYPES TO CHECK:
+- 假冒機構/Institution Impersonation: Pretending to be police, banks, government agencies, courts
+- 假投資/Investment Scam: Promising high returns via crypto or stock tips
+- 一鍵詐騙/One-click fraud: Unsolicited calls claiming prizes, debts, or package issues
+- 假交友/Romance Scam: Building trust then requesting money
+- 車手詐騙/Money mule recruitment: Asking to transfer money on their behalf
+
+SCORING:
+- trustScore: 0(Confirmed Scam)-100(Legitimate). <20: Confirmed Scam Number. 20-40: High Risk. 40-60: Suspicious/Unknown. >80: Likely Safe.
+- scamProbability: Based on Whoscall data, search results, and known scam patterns.
+
+OUTPUT JSON ONLY:
+{
+  "d": "Caller/Organization Name (if identifiable, else 'Unknown')",
+  "b": "Brief description of this number (max 15 words)",
+  "s": 0-3 (0=Unknown, 1=Legitimate Business, 2=Scammer, 3=Verified Organization),
+  "ts": Trust Score (0-100),
+  "sp": Scam Probability (0-100),
+  "v": "One sentence verdict about this phone number",
+  "eq": 0-3 (0=Legitimate, 1=Questionable, 2=Suspicious, 3=Known Scam),
+  "c": ["Reasons this might be legitimate"],
+  "r": ["Warning signs and risk factors"],
+  "rs": [{"t": "Signal Type (e.g., IMPERSONATION, SPAM_CALL, KNOWN_SCAM_NUMBER, PRESSURE_TACTICS)", "e": "Direct evidence", "l": 0-2 (0=CRITICAL, 1=WARNING, 2=INFO)}],
+  "h": [{"dt": "YYYY-MM-DD", "e": "Report Title", "t": 0-5, "tk": null, "s": 0-2, "x": "Details"}]
 }
 `;
       } else {
