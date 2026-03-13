@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Search, Loader2, TrendingUp, AlertTriangle, Shield, Link, MessageSquare, AtSign } from 'lucide-react';
+import { Search, Loader2, TrendingUp, AlertTriangle, Shield, Link, MessageSquare, AtSign, Phone } from 'lucide-react';
 import { Language, InputType } from '../types';
 
-type InputMode = 'HANDLE' | 'URL' | 'SMS_TEXT';
+type InputMode = 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE';
 
 interface SearchInputProps {
   onSearch: (input: string, inputType?: InputType) => void;
@@ -17,11 +17,13 @@ const TRANSLATIONS = {
       HANDLE: 'Enter Twitter/X handle...',
       URL: 'Paste suspicious URL here...',
       SMS_TEXT: 'Paste suspicious message here...',
+      PHONE: 'Enter phone number (e.g. +886912345678)...',
     },
     placeholderSenior: {
       HANDLE: 'Type the account name...',
       URL: 'Paste the link here...',
       SMS_TEXT: 'Paste the message here...',
+      PHONE: 'Type the phone number here...',
     },
     scanning: 'Scanning...',
     scanningSenior: 'Checking...',
@@ -31,11 +33,13 @@ const TRANSLATIONS = {
       HANDLE: 'Account',
       URL: 'Link',
       SMS_TEXT: 'Message',
+      PHONE: 'Phone',
     },
     inputModesSenior: {
       HANDLE: 'Check Account',
       URL: 'Check Link',
       SMS_TEXT: 'Check Message',
+      PHONE: 'Check Phone',
     },
     categories: {
       controversial: 'Controversial',
@@ -62,11 +66,13 @@ const TRANSLATIONS = {
       HANDLE: '輸入 Twitter/X 帳號...',
       URL: '貼上可疑網址...',
       SMS_TEXT: '貼上可疑訊息內容...',
+      PHONE: '輸入電話號碼（如 0912345678）...',
     },
     placeholderSenior: {
       HANDLE: '請輸入帳號名稱...',
       URL: '請貼上網址連結...',
       SMS_TEXT: '請貼上收到的訊息...',
+      PHONE: '請輸入電話號碼...',
     },
     scanning: '掃描中...',
     scanningSenior: '檢查中...',
@@ -76,11 +82,13 @@ const TRANSLATIONS = {
       HANDLE: '帳號',
       URL: '網址',
       SMS_TEXT: '訊息',
+      PHONE: '電話',
     },
     inputModesSenior: {
       HANDLE: '查帳號',
       URL: '查網址',
       SMS_TEXT: '查訊息',
+      PHONE: '查電話',
     },
     categories: {
       controversial: '爭議人物',
@@ -151,6 +159,8 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         return <Link className={iconClass} />;
       case 'SMS_TEXT':
         return <MessageSquare className={iconClass} />;
+      case 'PHONE':
+        return <Phone className={iconClass} />;
     }
   };
 
@@ -162,11 +172,14 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
     return getModeIcon(inputMode);
   };
 
+  // Use tel input type for PHONE mode for better mobile UX
+  const getInputType = () => inputMode === 'PHONE' ? 'tel' : 'text';
+
   return (
     <div className={`w-full mx-auto mb-12 ${isSeniorMode ? 'max-w-3xl' : 'max-w-2xl'}`}>
       {/* Input Mode Tabs */}
       <div className={`flex justify-center gap-2 mb-4 ${isSeniorMode ? 'gap-4' : ''}`}>
-        {(['HANDLE', 'URL', 'SMS_TEXT'] as InputMode[]).map((mode) => (
+        {(['HANDLE', 'URL', 'SMS_TEXT', 'PHONE'] as InputMode[]).map((mode) => (
           <button
             key={mode}
             onClick={() => {
@@ -192,7 +205,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
       <form onSubmit={handleSubmit} className="relative group">
         <div className="absolute inset-0 bg-crypto-accent opacity-20 blur-xl group-hover:opacity-30 transition-opacity rounded-full"></div>
 
-        {/* Text input for HANDLE and URL modes */}
+        {/* Text input for HANDLE, URL, and PHONE modes */}
         {inputMode !== 'SMS_TEXT' ? (
           <div className={`relative flex items-center bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden focus-within:border-crypto-accent transition-colors ${
             isSeniorMode ? 'rounded-2xl' : 'rounded-full'
@@ -201,7 +214,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
               {getInputPrefix()}
             </div>
             <input
-              type="text"
+              type={getInputType()}
               className={`w-full bg-transparent text-white placeholder-gray-500 focus:outline-none font-sans ${
                 isSeniorMode ? 'px-4 py-6 text-2xl' : 'px-2 py-4 text-lg'
               }`}
@@ -335,8 +348,8 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         <div className="mt-6 text-center">
           <p className="text-xl text-gray-300">
             {language === 'zh-TW'
-              ? '收到可疑訊息或連結？貼上來讓我們幫您檢查！'
-              : 'Got a suspicious message or link? Paste it here and we\'ll check it for you!'}
+              ? '收到可疑訊息、連結或電話？貼上來讓我們幫您檢查！'
+              : 'Got a suspicious message, link, or phone number? Paste it here and we\'ll check it for you!'}
           </p>
         </div>
       )}
