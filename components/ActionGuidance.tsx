@@ -147,6 +147,7 @@ const ActionGuidance: React.FC<ActionGuidanceProps> = ({
       {/* Action Buttons */}
       <div className={`grid gap-4 ${isSeniorMode ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
         {actions
+          .filter(action => language === 'zh-TW' || action.type !== 'CALL_165')
           .sort((a, b) => a.priority - b.priority)
           .map((action, idx) => (
             <button
@@ -160,8 +161,8 @@ const ActionGuidance: React.FC<ActionGuidanceProps> = ({
           ))}
       </div>
 
-      {/* Special 165 Call-to-Action for High Risk in Senior Mode */}
-      {isHighRisk && isSeniorMode && (
+      {/* Special 165 Call-to-Action for High Risk in Senior Mode (zh-TW only) */}
+      {isHighRisk && isSeniorMode && language === 'zh-TW' && (
         <div className="mt-6 p-4 bg-red-800/50 rounded-xl text-center">
           <p className="text-white text-lg mb-2">{t.tapToCall}</p>
           <a

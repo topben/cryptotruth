@@ -435,7 +435,7 @@ const App: React.FC = () => {
                   {isSeniorMode ? t.error.titleSenior : t.error.title}
                 </h3>
                 <p className={`text-gray-400 ${isSeniorMode ? 'text-xl' : ''}`}>{error}</p>
-                {isSeniorMode && (
+                {isSeniorMode && language === 'zh-TW' && (
                   <a
                     href="tel:165"
                     className="inline-flex items-center gap-2 mt-6 px-8 py-4 bg-red-600 hover:bg-red-500 text-white text-xl font-bold rounded-xl"
@@ -462,7 +462,7 @@ const App: React.FC = () => {
                 <p className="text-3xl font-bold text-white mb-4">
                   {analysis.seniorModeVerdict}
                 </p>
-                {analysis.scamProbability >= 70 && (
+                {analysis.scamProbability >= 70 && language === 'zh-TW' && (
                   <a
                     href="tel:165"
                     className="inline-flex items-center gap-3 px-10 py-5 bg-red-600 hover:bg-red-500 text-white text-2xl font-bold rounded-2xl shadow-lg animate-pulse"
@@ -609,13 +609,13 @@ const App: React.FC = () => {
                         </span>
                         <ExternalLink className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
                       </a>
-                    ) : (
+                    ) : language === 'zh-TW' ? (
                       <div className="mt-6 p-4 bg-blue-900/20 border border-blue-700 rounded-xl">
                         <p className="text-lg text-blue-300">
                           💡 {t.guidance.call165}
                         </p>
                       </div>
-                    )}
+                    ) : null}
                 </div>
             </div>
 
