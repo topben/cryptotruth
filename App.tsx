@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { TruthGuardAnalysis, LoadingState, Language, InputType } from './types';
 import { analyzeTruthGuard, APIError } from './services/geminiService';
@@ -7,7 +7,7 @@ import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
 import ActionGuidance from './components/ActionGuidance';
 import RiskSignals from './components/RiskSignals';
-import { ShieldAlert, Activity, Search, Share2, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, Eye } from 'lucide-react';
+import { ShieldAlert, Activity, Search, Share2, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, Eye, ChevronDown } from 'lucide-react';
 
 // UI Text dictionary for all static text
 const UI_TEXT = {
@@ -81,6 +81,7 @@ const UI_TEXT = {
     inline: {
       call165Btn: 'Call 165 for Help',
       screenshot: 'Screenshot',
+      message: 'Message',
       unknownIdentity: 'Unknown',
       impersonator: 'Fake',
       seniorHint: 'Got a suspicious message, link, or phone number? Paste it here and we\'ll check it for you!'
@@ -156,6 +157,7 @@ const UI_TEXT = {
     inline: {
       call165Btn: '撥打 165 求助',
       screenshot: '截圖分析',
+      message: '訊息',
       unknownIdentity: '身分未明',
       impersonator: '冒充者',
       seniorHint: '收到可疑訊息、連結或電話？貼上來讓我們幫您檢查！'
@@ -231,12 +233,19 @@ const UI_TEXT = {
     inline: {
       call165Btn: 'Gọi hỗ trợ',
       screenshot: 'Phân tích ảnh chụp',
+      message: 'Tin nhắn',
       unknownIdentity: 'Danh tính không rõ',
       impersonator: 'Giả mạo',
       seniorHint: 'Nhận được tin nhắn, liên kết hoặc số điện thoại đáng ngờ? Dán vào đây để chúng tôi kiểm tra!'
     }
   }
 } as const;
+
+const LANG_OPTIONS: { code: Language; label: string }[] = [
+  { code: 'zh-TW', label: '繁中' },
+  { code: 'en',    label: 'EN'   },
+  { code: 'vi',    label: 'VI'   },
+];
 
 const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('zh-TW');
@@ -245,6 +254,18 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState<number>(0);
   const [isSeniorMode, setIsSeniorMode] = useState<boolean>(false);
+  const [langMenuOpen, setLangMenuOpen] = useState<boolean>(false);
+  const langMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) {
+        setLangMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Get current language text
   const t = UI_TEXT[language];
@@ -261,10 +282,6 @@ const App: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [loadingState, loadingMessages.length, isSeniorMode]);
-
-  const toggleLanguage = () => {
-    setLanguage(prev => prev === 'zh-TW' ? 'en' : prev === 'en' ? 'vi' : 'zh-TW');
-  };
 
   const toggleSeniorMode = () => {
     setIsSeniorMode(prev => !prev);
@@ -370,16 +387,39 @@ const App: React.FC = () => {
               </span>
               <Eye className={`${isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'} sm:hidden`} />
             </button>
-            {/* Language Toggle Button */}
-            <button
-              onClick={toggleLanguage}
-              className={`flex items-center gap-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-colors font-medium ${
-                isSeniorMode ? 'px-4 py-2 text-base' : 'px-3 py-1.5 text-sm'
-              }`}
-            >
-              <Globe className={isSeniorMode ? 'w-5 h-5 text-crypto-accent' : 'w-4 h-4 text-crypto-accent'} />
-              <span className="text-white">{language === 'en' ? 'EN' : language === 'zh-TW' ? '繁中' : 'VI'}</span>
-            </button>
+            {/* Language Dropdown */}
+            <div className="relative" ref={langMenuRef}>
+              <button
+                onClick={() => setLangMenuOpen(prev => !prev)}
+                className={`flex items-center gap-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-colors font-medium ${
+                  isSeniorMode ? 'px-4 py-2 text-base' : 'px-3 py-1.5 text-sm'
+                }`}
+              >
+                <Globe className={isSeniorMode ? 'w-5 h-5 text-crypto-accent' : 'w-4 h-4 text-crypto-accent'} />
+                <span className="text-white">{LANG_OPTIONS.find(o => o.code === language)?.label}</span>
+                <ChevronDown className={`text-gray-400 transition-transform duration-200 ${langMenuOpen ? 'rotate-180' : ''} ${isSeniorMode ? 'w-4 h-4' : 'w-3 h-3'}`} />
+              </button>
+              {langMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden min-w-[90px]">
+                  {LANG_OPTIONS.map(({ code, label }) => (
+                    <button
+                      key={code}
+                      onClick={() => { setLanguage(code); setLangMenuOpen(false); }}
+                      className={`w-full text-left px-4 py-2 flex items-center gap-2 transition-colors ${
+                        isSeniorMode ? 'text-base' : 'text-sm'
+                      } ${
+                        language === code
+                          ? 'bg-crypto-accent/10 text-crypto-accent font-semibold'
+                          : 'text-gray-300 hover:bg-gray-700'
+                      }`}
+                    >
+                      {label}
+                      {language === code && <span className="ml-auto text-crypto-accent text-xs">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="text-xs text-gray-500 font-mono hidden md:block">
               {t.poweredBy}
             </div>
@@ -508,7 +548,7 @@ const App: React.FC = () => {
                               {analysis.inputType === 'HANDLE' ? `@${analysis.handle}` :
                                analysis.inputType === 'URL' ? '🔗 URL' :
                                analysis.inputType === 'IMAGE' ? '🖼️ ' + t.inline.screenshot :
-                               '💬 ' + (language === 'zh-TW' ? '訊息' : 'Message')}
+                               '💬 ' + t.inline.message}
                             </h2>
                             <p className={`text-crypto-muted font-mono mb-4 ${isSeniorMode ? 'text-base' : 'text-sm'}`}>
                               {analysis.displayName}
@@ -615,7 +655,20 @@ const App: React.FC = () => {
                           💡 {t.guidance.call165}
                         </p>
                       </div>
-                    ) : null}
+                    ) : (
+                      <a
+                        href="https://gemini.google.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-4 flex items-start gap-3 p-3 bg-crypto-accent/5 border border-crypto-accent/20 rounded-lg hover:bg-crypto-accent/10 transition-colors group cursor-pointer"
+                      >
+                        <Sparkles className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0" />
+                        <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors">
+                          {t.guidance.advancedInfo}
+                        </span>
+                        <ExternalLink className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
+                      </a>
+                    )}
                 </div>
             </div>
 

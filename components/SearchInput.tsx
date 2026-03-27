@@ -75,43 +75,43 @@ const TRANSLATIONS = {
 const SCENARIO_CHIPS: Array<{
   id: string;
   icon: string;
-  label: { en: string; 'zh-TW': string };
+  label: { en: string; 'zh-TW': string; vi: string };
   sample: string;
 }> = [
   {
     id: 'social_ad',
     icon: '📢',
-    label: { en: 'Social Media Ad', 'zh-TW': '社群廣告' },
+    label: { en: 'Social Media Ad', 'zh-TW': '社群廣告', vi: 'Quảng cáo mạng xã hội' },
     sample: 'https://bit.ly/3invest-now-crypto',
   },
   {
     id: 'celeb_invest',
     icon: '💰',
-    label: { en: 'Fake Celebrity Investment', 'zh-TW': '假名人投資' },
+    label: { en: 'Fake Celebrity Investment', 'zh-TW': '假名人投資', vi: 'Đầu tư giả người nổi tiếng' },
     sample: '馬斯克推薦：每月保證30%報酬！立即點擊加入 https://elon-crypto-tw.com',
   },
   {
     id: 'customer_service',
     icon: '📞',
-    label: { en: 'Fake Customer Service', 'zh-TW': '客服詐騙' },
+    label: { en: 'Fake Customer Service', 'zh-TW': '客服詐騙', vi: 'Giả nhân viên hỗ trợ' },
     sample: '您好，我是台灣銀行客服，您的帳戶出現異常交易，請立即撥打 02-1234-5678 處理',
   },
   {
     id: 'phishing_sms',
     icon: '📩',
-    label: { en: 'Phishing SMS', 'zh-TW': '釣魚簡訊' },
+    label: { en: 'Phishing SMS', 'zh-TW': '釣魚簡訊', vi: 'SMS lừa đảo' },
     sample: '您的包裹無法投遞，請點擊更新地址：https://post-tw-delivery.net/verify',
   },
   {
     id: 'fake_account',
     icon: '🎭',
-    label: { en: 'Fake Official Account', 'zh-TW': '假官方帳號' },
+    label: { en: 'Fake Official Account', 'zh-TW': '假官方帳號', vi: 'Tài khoản chính thức giả' },
     sample: '@TaiwanBank_Official',
   },
   {
     id: 'fake_giveaway',
     icon: '🎁',
-    label: { en: 'Fake Giveaway', 'zh-TW': '假抽獎/假活動' },
+    label: { en: 'Fake Giveaway', 'zh-TW': '假抽獎/假活動', vi: 'Quà tặng/sự kiện giả' },
     sample: '恭喜您中獎！請點擊領取 iPhone 15：https://apple-lucky-tw.com/prize',
   },
 ];
@@ -375,7 +375,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
                 disabled={isLoading}
               >
                 <span>{icon}</span>
-                <span>{label[language]}</span>
+                <span>{label[language as keyof typeof label] ?? label.en}</span>
               </button>
             ))}
           </div>
