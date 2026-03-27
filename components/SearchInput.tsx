@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Loader2, AtSign, Link, Phone, MessageSquare, ImagePlus, X } from 'lucide-react';
+import { Search, Loader2, AtSign, Link, Phone, MessageSquare, ImagePlus, FileText, X } from 'lucide-react';
 import { Language, InputType } from '../types';
 
 type InputMode = 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE';
@@ -28,8 +28,11 @@ const TRANSLATIONS = {
     detectedLabel: 'Detected:',
     scenarioHint: 'Common scam scenarios — click to try an example:',
     uploadImage: 'Upload Screenshot',
+    uploadTxt: 'Upload .txt file',
     imageReady: 'Screenshot ready — click Check to analyze',
-    pasteImage: 'or paste a screenshot (Ctrl+V)',
+    txtReady: '{name} loaded — click Check to analyze',
+    pasteImage: 'or paste a screenshot (Ctrl+V) · or upload a .txt file',
+    txtTooLarge: 'File too large — showing first 50,000 characters',
   },
   'zh-TW': {
     placeholder: '貼上網址、電話號碼、@帳號或可疑訊息...',
@@ -47,8 +50,11 @@ const TRANSLATIONS = {
     detectedLabel: '偵測到：',
     scenarioHint: '常見詐騙情境，點擊體驗範例：',
     uploadImage: '上傳截圖',
+    uploadTxt: '上傳 .txt 文字檔',
     imageReady: '截圖已就緒，點擊「檢查」開始分析',
-    pasteImage: '或直接貼上截圖（Ctrl+V）',
+    txtReady: '已載入 {name}，點擊「檢查」開始分析',
+    pasteImage: '或直接貼上截圖（Ctrl+V）· 或上傳 .txt 檔案',
+    txtTooLarge: '檔案過大，僅顯示前 50,000 字元',
   },
   vi: {
     placeholder: 'Dán liên kết, số điện thoại, @tài khoản hoặc tin nhắn đáng ngờ...',
@@ -66,8 +72,11 @@ const TRANSLATIONS = {
     detectedLabel: 'Phát hiện:',
     scenarioHint: 'Các tình huống lừa đảo phổ biến — nhấn để thử ví dụ:',
     uploadImage: 'Tải ảnh chụp màn hình',
+    uploadTxt: 'Tải file .txt',
     imageReady: 'Ảnh chụp màn hình đã sẵn sàng — nhấn Kiểm tra để phân tích',
-    pasteImage: 'hoặc dán ảnh chụp màn hình (Ctrl+V)',
+    txtReady: 'Đã tải {name} — nhấn Kiểm tra để phân tích',
+    pasteImage: 'hoặc dán ảnh chụp màn hình (Ctrl+V) · hoặc tải file .txt',
+    txtTooLarge: 'File quá lớn — chỉ hiển thị 50.000 ký tự đầu tiên',
   },
 };
 
@@ -159,11 +168,31 @@ const DETECTED_COLORS: Record<InputMode, string> = {
   PHONE:  'text-green-400 border-green-400/40 bg-green-400/10',
 };
 
+const MAX_TXT_CHARS = 50_000;
+
 const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language, isSeniorMode = false }) => {
   const t = TRANSLATIONS[language];
   const [input, setInput] = useState('');
   const [image, setImage] = useState<{ dataUrl: string; base64: string; mediaType: string } | null>(null);
+  const [txtFileName, setTxtFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const txtInputRef = useRef<HTMLInputElement>(null);
+
+  const loadTextFile = useCallback((file: File) => {
+    if (!file.name.toLowerCase().endsWith('.txt') && file.type !== 'text/plain') return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      let text = (e.target?.result as string) ?? '';
+      if (text.length > MAX_TXT_CHARS) {
+        text = text.slice(0, MAX_TXT_CHARS);
+        // small non-blocking toast via console — actual notice shown via txtTooLarge translation
+      }
+      setInput(text);
+      setImage(null);
+      setTxtFileName(file.name);
+    };
+    reader.readAsText(file, 'utf-8');
+  }, []);
 
   const loadImageFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return;
@@ -187,6 +216,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         const base64 = dataUrl.split(',')[1];
         setImage({ dataUrl, base64, mediaType: 'image/jpeg' });
         setInput('');
+        setTxtFileName(null);
       };
       img.src = originalDataUrl;
     };
@@ -202,6 +232,10 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
           if (file) { loadImageFile(file); e.preventDefault(); }
+          return;
+        }
+        if (item.type === 'text/plain') {
+          // plain text pastes are handled natively by the input/textarea
           break;
         }
       }
@@ -277,7 +311,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) loadImageFile(f); e.target.value = ''; }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) { loadImageFile(f); setTxtFileName(null); } e.target.value = ''; }}
       />
 
       {/* Image preview — shown when an image is loaded */}
@@ -295,21 +329,67 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         </div>
       )}
 
+      {/* Hidden file inputs */}
+      <input
+        ref={txtInputRef}
+        type="file"
+        accept=".txt,text/plain"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) loadTextFile(f); e.target.value = ''; }}
+      />
+
       <form onSubmit={handleSubmit} className="relative group">
         <div className="absolute inset-0 bg-crypto-accent opacity-20 blur-xl group-hover:opacity-30 transition-opacity rounded-full pointer-events-none"></div>
 
         {useTextarea ? (
           <div className={`relative bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden focus-within:border-crypto-accent transition-colors rounded-2xl`}>
+            {/* Filename badge when loaded from .txt */}
+            {txtFileName && (
+              <div className="flex items-center gap-2 px-4 pt-3">
+                <FileText className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+                <span className="text-xs text-purple-300 font-medium truncate">{txtFileName}</span>
+                {input.length >= MAX_TXT_CHARS && (
+                  <span className="text-xs text-yellow-400 flex-shrink-0">· {t.txtTooLarge}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setTxtFileName(null); setInput(''); }}
+                  className="ml-auto text-gray-500 hover:text-gray-300 flex-shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             <textarea
               className={`w-full bg-transparent text-white placeholder-gray-500 focus:outline-none font-sans resize-none ${
                 isSeniorMode ? 'p-6 text-xl min-h-[200px]' : 'p-4 text-lg min-h-[120px]'
-              }`}
+              } ${txtFileName ? 'pt-2' : ''}`}
               placeholder={placeholder}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => { setInput(e.target.value); if (txtFileName) setTxtFileName(null); }}
               disabled={isLoading}
             />
-            <div className={`flex justify-end border-t border-gray-800 ${isSeniorMode ? 'p-4' : 'p-3'}`}>
+            <div className={`flex items-center justify-between border-t border-gray-800 ${isSeniorMode ? 'p-4' : 'p-3'}`}>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  title={t.uploadImage}
+                  className="text-gray-500 hover:text-crypto-accent transition-colors disabled:opacity-40"
+                >
+                  <ImagePlus className={isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => txtInputRef.current?.click()}
+                  disabled={isLoading}
+                  title={t.uploadTxt}
+                  className="text-gray-500 hover:text-purple-400 transition-colors disabled:opacity-40"
+                >
+                  <FileText className={isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'} />
+                </button>
+              </div>
               {submitButton()}
             </div>
           </div>
@@ -333,6 +413,15 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
               onChange={(e) => setInput(e.target.value)}
               disabled={isLoading}
             />
+            <button
+              type="button"
+              onClick={() => txtInputRef.current?.click()}
+              disabled={isLoading}
+              title={t.uploadTxt}
+              className={`text-gray-500 hover:text-purple-400 transition-colors disabled:opacity-40 flex-shrink-0 ${isSeniorMode ? 'pr-2' : 'pr-1'}`}
+            >
+              <FileText className={isSeniorMode ? 'w-6 h-6' : 'w-5 h-5'} />
+            </button>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
