@@ -412,6 +412,12 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Server configuration error: API Key missing' });
   }
 
+  // === BOT AUTHENTICATION ===
+  // Requests with a valid X-Bot-Key header bypass per-IP rate limiting.
+  const botApiKey = process.env.BOT_API_KEY;
+  const requestBotKey = req.headers['x-bot-key'];
+  const isBotRequest = botApiKey && requestBotKey === botApiKey;
+
   try {
     const { handle: rawHandle, input: rawInput, inputType: rawInputType, language: rawLanguage, forceRefresh } = req.body;
 
@@ -481,19 +487,20 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    // === RATE LIMITING (only for API calls, not cache hits) ===
-    const clientIP = getClientIP(req);
-    const rateLimit = await checkRateLimit(clientIP);
+    // === RATE LIMITING (only for API calls, not cache hits; skipped for authenticated bots) ===
+    if (!isBotRequest) {
+      const clientIP = getClientIP(req);
+      const rateLimit = await checkRateLimit(clientIP);
 
-    // Set rate limit headers
-    res.setHeader('X-RateLimit-Limit', MAX_REQUESTS_PER_WINDOW);
-    res.setHeader('X-RateLimit-Remaining', rateLimit.remaining);
+      res.setHeader('X-RateLimit-Limit', MAX_REQUESTS_PER_WINDOW);
+      res.setHeader('X-RateLimit-Remaining', rateLimit.remaining);
 
-    if (!rateLimit.allowed) {
-      return res.status(429).json({
-        error: 'Rate limit exceeded. Please try again later.',
-        retryAfter: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000 / 60) + ' minutes'
-      });
+      if (!rateLimit.allowed) {
+        return res.status(429).json({
+          error: 'Rate limit exceeded. Please try again later.',
+          retryAfter: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000 / 60) + ' minutes'
+        });
+      }
     }
 
     // === CALL GEMINI API ===
