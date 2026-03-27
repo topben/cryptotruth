@@ -10,7 +10,9 @@ import RiskSignals from './components/RiskSignals';
 import InterruptWarning from './components/InterruptWarning';
 import LossRiskPanel from './components/LossRiskPanel';
 import TacticCards from './components/TacticCards';
+import ScamScriptBreakdown from './components/ScamScriptBreakdown';
 import RescueMode from './components/RescueMode';
+import OfficialVerification from './components/OfficialVerification';
 import EvidencePack from './components/EvidencePack';
 import { ShieldAlert, Search, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, Eye, ChevronDown } from 'lucide-react';
 
@@ -482,16 +484,17 @@ const App: React.FC = () => {
         {analysis && loadingState === 'COMPLETED' && (
           <div className="animate-fade-in-up max-w-3xl mx-auto">
 
-            {/* 1. Interrupt Warning — verdict + human message + 3-layer CTA */}
+            {/* ── 1. Risk verdict + stop-the-flow intervention block ── */}
             <InterruptWarning
               scamProbability={analysis.scamProbability}
               verdict={analysis.verdict}
               seniorModeVerdict={isSeniorMode ? analysis.seniorModeVerdict : undefined}
               language={language}
               isSeniorMode={isSeniorMode}
+              signals={analysis.riskSignals ?? []}
             />
 
-            {/* 2. Action Guidance — Module C (zh-TW 165 guarded inside component) */}
+            {/* ── 2. 3-layer CTA — specific action buttons from AI ── */}
             {analysis.suggestedActions && analysis.suggestedActions.length > 0 && (
               <ActionGuidance
                 actions={analysis.suggestedActions}
@@ -501,14 +504,14 @@ const App: React.FC = () => {
               />
             )}
 
-            {/* 3. Loss Risk Panel — 4 loss categories (medium/high risk only) */}
+            {/* ── 3. Possible loss / control-loss section ── */}
             <LossRiskPanel
               scamProbability={analysis.scamProbability}
               language={language}
               isSeniorMode={isSeniorMode}
             />
 
-            {/* 4. Tactic Cards — rebuttal scripts mapped from risk signals */}
+            {/* ── 4. Rebuttal-script counter-manipulation cards ── */}
             {analysis.riskSignals && analysis.riskSignals.length > 0 && (
               <TacticCards
                 signals={analysis.riskSignals}
@@ -517,7 +520,7 @@ const App: React.FC = () => {
               />
             )}
 
-            {/* 5. Risk Signals — progressive disclosure (first 3 visible, expandable) */}
+            {/* ── 5. Top 3 red flags + expandable evidence chain ── */}
             {analysis.riskSignals && analysis.riskSignals.length > 0 && (
               <RiskSignals
                 signals={analysis.riskSignals}
@@ -526,18 +529,55 @@ const App: React.FC = () => {
               />
             )}
 
-            {/* 6. Rescue Mode — "I already did X, what now?" flows */}
+            {/* ── 6. Scam script / playbook breakdown ── */}
+            {analysis.riskSignals && analysis.riskSignals.length > 0 && (
+              <ScamScriptBreakdown
+                signals={analysis.riskSignals}
+                scamProbability={analysis.scamProbability}
+                language={language}
+                isSeniorMode={isSeniorMode}
+              />
+            )}
+
+            {/* ── 7. Rescue mode — "I already did X, what now?" ── */}
             <RescueMode
               scamProbability={analysis.scamProbability}
               language={language}
               isSeniorMode={isSeniorMode}
             />
 
-            {/* 7. Simplified Analysis: bio summary + credibility/risk — hide in senior mode */}
+            {/* ── 8a. Official verification shortcuts ── */}
+            <OfficialVerification
+              originalInput={analysis.originalInput}
+              inputType={analysis.inputType}
+              scamProbability={analysis.scamProbability}
+              language={language}
+              isSeniorMode={isSeniorMode}
+            />
+
+            {/* ── 8b. Reporting pack / police pack ── */}
+            <EvidencePack
+              analysis={analysis}
+              language={language}
+              isSeniorMode={isSeniorMode}
+            />
+
+            {/* ── 9. Recent history ── */}
+            {!(isSeniorMode && analysis.inputType === 'SMS_TEXT') && analysis.history && analysis.history.length > 0 && (
+              <div className="mb-6">
+                <HistoryTimeline
+                  events={analysis.history}
+                  title={t.results.trackRecord}
+                  language={language}
+                />
+              </div>
+            )}
+
+            {/* ── Below the fold: analysis detail + trust meter ── */}
             {!isSeniorMode && (
               <div className="mb-6 space-y-4">
                 {analysis.bioSummary && (
-                  <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+                  <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4">
                     <p className="text-gray-300 leading-relaxed text-sm">{analysis.bioSummary}</p>
                     <div className="flex gap-2 mt-3 flex-wrap">
                       {analysis.source === 'cache' && (
@@ -560,7 +600,6 @@ const App: React.FC = () => {
                   </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Credibility */}
                   {analysis.credibilityStrengths && analysis.credibilityStrengths.length > 0 && (
                     <div className="bg-crypto-card p-4 rounded-xl border border-gray-800">
                       <h4 className="text-sm font-semibold text-crypto-success mb-3 flex items-center gap-2">
@@ -577,7 +616,6 @@ const App: React.FC = () => {
                       </ul>
                     </div>
                   )}
-                  {/* Risk Factors */}
                   {analysis.riskFactors && analysis.riskFactors.length > 0 && (
                     <div className="bg-crypto-card p-4 rounded-xl border border-gray-800">
                       <h4 className="text-sm font-semibold text-orange-500 mb-3 flex items-center gap-2">
@@ -598,41 +636,23 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {/* 8. Evidence Pack — copy/download */}
-            <EvidencePack
-              analysis={analysis}
-              language={language}
-              isSeniorMode={isSeniorMode}
-            />
-
-            {/* 9. Track Record Timeline */}
-            {!(isSeniorMode && analysis.inputType === 'SMS_TEXT') && analysis.history && analysis.history.length > 0 && (
-              <div className="mb-6">
-                <HistoryTimeline
-                  events={analysis.history}
-                  title={t.results.trackRecord}
-                  language={language}
-                />
-              </div>
-            )}
-
-            {/* 10. Compact Trust Meter — demoted to bottom */}
+            {/* Trust meter — demoted to bottom */}
             {!isSeniorMode && (
-              <div className="mb-8">
+              <div className="mb-6">
                 <TrustMeter score={analysis.trustScore} language={language} />
               </div>
             )}
 
-            {/* Gemini deeper-analysis link */}
+            {/* Gemini link */}
             <a
               href="https://gemini.google.com/"
               target="_blank"
               rel="noopener noreferrer"
-              className="mb-8 flex items-center gap-3 p-3 bg-crypto-accent/5 border border-crypto-accent/20 rounded-lg hover:bg-crypto-accent/10 transition-colors group"
+              className="mb-10 flex items-center gap-3 p-3 bg-crypto-accent/5 border border-crypto-accent/20 rounded-lg hover:bg-crypto-accent/10 active:bg-crypto-accent/15 transition-colors group"
             >
               <Sparkles className="w-4 h-4 text-crypto-accent flex-shrink-0" />
               <span className={`text-gray-300 group-hover:text-gray-200 transition-colors ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>
-                {language === 'zh-TW' ? t.guidance.call165 : t.guidance.advancedInfo}
+                {t.guidance.advancedInfo}
               </span>
               <ExternalLink className="w-4 h-4 text-crypto-accent flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity ml-auto" />
             </a>

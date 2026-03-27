@@ -62,6 +62,53 @@ const SIGNAL_TYPE_LABELS: Record<string, { en: string; 'zh-TW': string; vi: stri
   UNKNOWN: { en: 'Unverified Risk', 'zh-TW': '未驗證風險', vi: 'Rủi ro chưa xác minh' },
 };
 
+// Evidence credibility layer: how was this signal determined?
+type CredibilityLayer = 'OBSERVED' | 'INFERRED' | 'EXTERNAL' | 'UNVERIFIED';
+
+const CREDIBILITY_MAP: Record<string, CredibilityLayer> = {
+  PHISHING_URL: 'OBSERVED',
+  TYPOSQUATTING: 'OBSERVED',
+  GUARANTEED_RETURNS: 'OBSERVED',
+  PRESSURE_TACTICS: 'OBSERVED',
+  SUSPICIOUS_PAYMENT: 'OBSERVED',
+  IMPERSONATION: 'INFERRED',
+  CELEBRITY_IMPERSONATION: 'INFERRED',
+  PONZI_SIGNS: 'INFERRED',
+  KNOWN_SCAM: 'EXTERNAL',
+  RUG_PULL_HISTORY: 'EXTERNAL',
+  SCAM_ALLEGATION: 'EXTERNAL',
+  BOT_ACTIVITY: 'EXTERNAL',
+  INSUFFICIENT_DATA: 'UNVERIFIED',
+  UNKNOWN: 'UNVERIFIED',
+};
+
+const CREDIBILITY_LABELS: Record<CredibilityLayer, { en: string; 'zh-TW': string; vi: string; color: string }> = {
+  OBSERVED: {
+    en: 'Directly observed',
+    'zh-TW': '直接觀察',
+    vi: 'Quan sát trực tiếp',
+    color: 'bg-emerald-900/40 border-emerald-700/50 text-emerald-400',
+  },
+  INFERRED: {
+    en: 'Pattern match',
+    'zh-TW': '模式比對',
+    vi: 'Khớp mẫu',
+    color: 'bg-blue-900/30 border-blue-700/50 text-blue-400',
+  },
+  EXTERNAL: {
+    en: 'External database',
+    'zh-TW': '外部資料庫',
+    vi: 'Cơ sở dữ liệu ngoài',
+    color: 'bg-purple-900/30 border-purple-700/50 text-purple-400',
+  },
+  UNVERIFIED: {
+    en: 'Pending verification',
+    'zh-TW': '待確認',
+    vi: 'Chờ xác minh',
+    color: 'bg-gray-800 border-gray-600 text-gray-400',
+  },
+};
+
 const VISIBLE_COUNT = 3;
 
 const RiskSignals: React.FC<RiskSignalsProps> = ({
@@ -143,6 +190,13 @@ const RiskSignals: React.FC<RiskSignalsProps> = ({
     return labels[language as keyof typeof labels] ?? labels.en;
   };
 
+  const getCredibilityLabel = (type: string) => {
+    const layer: CredibilityLayer = CREDIBILITY_MAP[type] ?? 'UNVERIFIED';
+    const entry = CREDIBILITY_LABELS[layer];
+    const label = entry[language as keyof typeof entry];
+    return { text: typeof label === 'string' ? label : entry.en, color: entry.color };
+  };
+
   return (
     <div className={`${isSeniorMode ? 'mb-8' : 'mb-6'}`}>
       <h3 className={`font-bold text-red-400 flex items-center gap-2 mb-4 ${isSeniorMode ? 'text-2xl' : 'text-xl'}`}>
@@ -176,6 +230,16 @@ const RiskSignals: React.FC<RiskSignalsProps> = ({
 
               {isExpanded && (
                 <div className={`border-t border-white/5 ${isSeniorMode ? 'px-5 py-4' : 'px-4 py-3'}`}>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    {(() => {
+                      const cred = getCredibilityLabel(signal.type);
+                      return (
+                        <span className={`inline-block border rounded text-xs font-medium px-1.5 py-0.5 ${cred.color}`}>
+                          {cred.text}
+                        </span>
+                      );
+                    })()}
+                  </div>
                   <span className={`text-gray-400 font-medium ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>{t.evidenceLabel}</span>{' '}
                   <span className={`text-gray-300 ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>{signal.evidence}</span>
                 </div>
