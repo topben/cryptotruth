@@ -27,8 +27,8 @@ By participating, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md
 ## Development Setup
 
 ```bash
-git clone https://github.com/your-username/cryptotruth.git
-cd cryptotruth
+git clone https://github.com/your-username/verify1st.git
+cd verify1st
 npm install
 cp .env.example .env.local
 # Add your GEMINI_API_KEY to .env.local

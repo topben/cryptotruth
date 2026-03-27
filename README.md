@@ -46,8 +46,8 @@ This approach allows the AI to discover information across the entire web rather
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/cryptotruth.git
-   cd cryptotruth
+   git clone https://github.com/yourusername/verify1st.git
+   cd verify1st
    ```
 
 2. Install dependencies:
@@ -84,7 +84,7 @@ This approach allows the AI to discover information across the entire web rather
 3. Add your `GEMINI_API_KEY` as an environment variable
 4. Deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/cryptotruth)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/verify1st)
 
 ### Manual Build
 
@@ -96,7 +96,7 @@ npm run preview
 ## Project Structure
 
 ```
-cryptotruth/
+verify1st/
 ├── api/
 │   └── analyze.ts        # Serverless API endpoint with Google Search grounding
 ├── components/

@@ -77,7 +77,7 @@ const UI_TEXT = {
       trackRecord: 'History'
     },
     share: {
-      tweetTemplate: 'I just checked this on TruthGuard AI!\n\n📊 {verdict}\n🔍 Safety Score: {score}/100\n\nCheck suspicious messages yourself:\nhttps://cryptotruth.news'
+      tweetTemplate: 'I just checked this on TruthGuard AI!\n\n📊 {verdict}\n🔍 Safety Score: {score}/100\n\nCheck suspicious messages yourself:\nhttps://verify1st.tw'
     },
     search: {
       newSearch: 'Check Another'
@@ -154,7 +154,7 @@ const UI_TEXT = {
       trackRecord: '歷史紀錄'
     },
     share: {
-      tweetTemplate: '我剛在 TruthGuard AI 查了這個！\n\n📊 {verdict}\n🔍 安全分數：{score}/100\n\n自己來查查可疑訊息：\nhttps://cryptotruth.news'
+      tweetTemplate: '我剛在 TruthGuard AI 查了這個！\n\n📊 {verdict}\n🔍 安全分數：{score}/100\n\n自己來查查可疑訊息：\nhttps://verify1st.tw'
     },
     search: {
       newSearch: '再查一個'
@@ -231,7 +231,7 @@ const UI_TEXT = {
       trackRecord: 'Lịch sử'
     },
     share: {
-      tweetTemplate: 'Tôi vừa kiểm tra điều này trên VerifyFirst AI!\n\n📊 {verdict}\n🔍 Điểm an toàn: {score}/100\n\nTự kiểm tra tin nhắn đáng ngờ:\nhttps://cryptotruth.news'
+      tweetTemplate: 'Tôi vừa kiểm tra điều này trên VerifyFirst AI!\n\n📊 {verdict}\n🔍 Điểm an toàn: {score}/100\n\nTự kiểm tra tin nhắn đáng ngờ:\nhttps://verify1st.tw'
     },
     search: {
       newSearch: 'Kiểm tra thêm'
