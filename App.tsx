@@ -7,7 +7,12 @@ import TrustMeter from './components/TrustMeter';
 import HistoryTimeline from './components/HistoryTimeline';
 import ActionGuidance from './components/ActionGuidance';
 import RiskSignals from './components/RiskSignals';
-import { ShieldAlert, Activity, Search, Share2, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, Eye, ChevronDown } from 'lucide-react';
+import InterruptWarning from './components/InterruptWarning';
+import LossRiskPanel from './components/LossRiskPanel';
+import TacticCards from './components/TacticCards';
+import RescueMode from './components/RescueMode';
+import EvidencePack from './components/EvidencePack';
+import { ShieldAlert, Search, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, Eye, ChevronDown } from 'lucide-react';
 
 // UI Text dictionary for all static text
 const UI_TEXT = {
@@ -333,19 +338,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleShareOnX = () => {
-    if (!analysis) return;
-
-    const verdict = analysis.verdict || `Safety Score: ${analysis.trustScore}/100`;
-    const displayHandle = analysis.handle || analysis.originalInput?.substring(0, 30) || 'content';
-    const tweetText = `⚠️ ${t.share.tweetTemplate
-      .replace('{handle}', displayHandle)
-      .replace('{verdict}', verdict)
-      .replace('{score}', String(analysis.trustScore))} 👇`;
-
-    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
-    window.open(twitterUrl, '_blank', 'noopener,noreferrer');
-  };
 
   // Senior mode styles
   const seniorModeStyles = isSeniorMode ? {
@@ -488,32 +480,18 @@ const App: React.FC = () => {
 
         {/* Results View */}
         {analysis && loadingState === 'COMPLETED' && (
-          <div className="animate-fade-in-up">
+          <div className="animate-fade-in-up max-w-3xl mx-auto">
 
-            {/* Senior Mode: Simple Summary First */}
-            {isSeniorMode && analysis.seniorModeVerdict && (
-              <div className={`mb-8 p-8 rounded-2xl border-2 text-center ${
-                analysis.scamProbability >= 70
-                  ? 'bg-red-900/30 border-red-500'
-                  : analysis.scamProbability >= 40
-                  ? 'bg-yellow-900/20 border-yellow-500'
-                  : 'bg-green-900/20 border-green-500'
-              }`}>
-                <p className="text-3xl font-bold text-white mb-4">
-                  {analysis.seniorModeVerdict}
-                </p>
-                {analysis.scamProbability >= 70 && language === 'zh-TW' && (
-                  <a
-                    href="tel:165"
-                    className="inline-flex items-center gap-3 px-10 py-5 bg-red-600 hover:bg-red-500 text-white text-2xl font-bold rounded-2xl shadow-lg animate-pulse"
-                  >
-                    📞 165
-                  </a>
-                )}
-              </div>
-            )}
+            {/* 1. Interrupt Warning — verdict + human message + 3-layer CTA */}
+            <InterruptWarning
+              scamProbability={analysis.scamProbability}
+              verdict={analysis.verdict}
+              seniorModeVerdict={isSeniorMode ? analysis.seniorModeVerdict : undefined}
+              language={language}
+              isSeniorMode={isSeniorMode}
+            />
 
-            {/* Action Guidance - Module C (Show prominently for high risk) */}
+            {/* 2. Action Guidance — Module C (zh-TW 165 guarded inside component) */}
             {analysis.suggestedActions && analysis.suggestedActions.length > 0 && (
               <ActionGuidance
                 actions={analysis.suggestedActions}
@@ -523,7 +501,23 @@ const App: React.FC = () => {
               />
             )}
 
-            {/* Risk Signals - Module B (Explainable Evidence) */}
+            {/* 3. Loss Risk Panel — 4 loss categories (medium/high risk only) */}
+            <LossRiskPanel
+              scamProbability={analysis.scamProbability}
+              language={language}
+              isSeniorMode={isSeniorMode}
+            />
+
+            {/* 4. Tactic Cards — rebuttal scripts mapped from risk signals */}
+            {analysis.riskSignals && analysis.riskSignals.length > 0 && (
+              <TacticCards
+                signals={analysis.riskSignals}
+                language={language}
+                isSeniorMode={isSeniorMode}
+              />
+            )}
+
+            {/* 5. Risk Signals — progressive disclosure (first 3 visible, expandable) */}
             {analysis.riskSignals && analysis.riskSignals.length > 0 && (
               <RiskSignals
                 signals={analysis.riskSignals}
@@ -532,204 +526,116 @@ const App: React.FC = () => {
               />
             )}
 
-            {/* Top Section: Profile + Trust Meter + Executive Summary */}
-            <div className={`grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8 ${isSeniorMode ? 'mt-8' : 'mt-6'}`}>
-                {/* Profile Info */}
-                <div className={`lg:col-span-5 bg-crypto-card rounded-2xl border border-gray-800 shadow-2xl relative overflow-hidden ${
-                  isSeniorMode ? 'p-8' : 'p-6'
-                }`}>
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Activity size={80} />
-                    </div>
+            {/* 6. Rescue Mode — "I already did X, what now?" flows */}
+            <RescueMode
+              scamProbability={analysis.scamProbability}
+              language={language}
+              isSeniorMode={isSeniorMode}
+            />
 
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <h2 className={`font-bold text-white mb-1 ${isSeniorMode ? 'text-3xl' : 'text-2xl'}`}>
-                              {analysis.inputType === 'HANDLE' ? `@${analysis.handle}` :
-                               analysis.inputType === 'URL' ? '🔗 URL' :
-                               analysis.inputType === 'IMAGE' ? '🖼️ ' + t.inline.screenshot :
-                               '💬 ' + t.inline.message}
-                            </h2>
-                            <p className={`text-crypto-muted font-mono mb-4 ${isSeniorMode ? 'text-base' : 'text-sm'}`}>
-                              {analysis.displayName}
-                            </p>
-                        </div>
-
-                        {/* Identity Status Badge */}
-                        {analysis.identityStatus === 'UNKNOWN_ENTITY' && (
-                            <span className={`bg-gray-700 text-gray-300 px-2 py-1 rounded border border-gray-600 ${
-                              isSeniorMode ? 'text-sm' : 'text-xs'
-                            }`}>
-                                ❓ {t.inline.unknownIdentity}
-                            </span>
-                        )}
-                        {analysis.identityStatus === 'IMPERSONATOR' && (
-                            <span className={`bg-red-900/50 text-red-400 px-2 py-1 rounded border border-red-800 animate-pulse ${
-                              isSeniorMode ? 'text-sm' : 'text-xs'
-                            }`}>
-                                ⚠️ {t.inline.impersonator}
-                            </span>
-                        )}
-                    </div>
-
-                    <p className={`text-gray-300 leading-relaxed ${isSeniorMode ? 'text-lg' : ''}`}>
-                        {analysis.bioSummary}
-                    </p>
-
-                    {/* Cache/Live Badge */}
-                    {!isSeniorMode && (
-                      <div className="mt-4">
-                        {analysis.source === 'cache' ? (
-                          <div className="bg-blue-900/20 p-2 rounded-lg border border-blue-800 inline-block">
-                            <span className="text-xs text-blue-400 font-medium">
-                              {t.results.cachedResult}
-                            </span>
-                            {analysis.cachedAt && (
-                              <span className="text-xs text-blue-500 ml-2">
-                                {(() => {
-                                  const ageMs = Date.now() - analysis.cachedAt;
-                                  const ageMinutes = Math.round(ageMs / 1000 / 60);
-                                  const timeDisplay = ageMinutes < 60 ? `${ageMinutes}m` : `${Math.round(ageMinutes / 60)}h`;
-                                  return t.results.cachedAgo.replace('{time}', timeDisplay);
-                                })()}
-                              </span>
-                            )}
-                          </div>
-                        ) : analysis.source === 'api' ? (
-                          <div className="bg-green-900/20 p-2 rounded-lg border border-green-800 inline-block">
-                            <span className="text-xs text-green-400 font-medium">
-                              {t.results.liveAnalysis}
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-                </div>
-
-                {/* Trust Meter */}
-                <div className="lg:col-span-3">
-                    <TrustMeter score={analysis.trustScore} language={language} />
-                    {/* Share Button - Hide in senior mode */}
-                    {!isSeniorMode && (
-                      <button
-                        onClick={handleShareOnX}
-                        className="w-full mt-4 bg-gradient-to-r from-crypto-accent to-blue-500 hover:from-blue-500 hover:to-crypto-accent text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group"
-                      >
-                        <Share2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                        {t.results.shareOnX}
-                      </button>
-                    )}
-                </div>
-
-                {/* Executive Summary */}
-                <div className={`lg:col-span-4 bg-gradient-to-br from-gray-900 to-crypto-card rounded-2xl border border-gray-700 shadow-2xl ${
-                  isSeniorMode ? 'p-8' : 'p-6'
-                }`}>
-                    <h3 className={`font-bold text-white mb-4 flex items-center gap-2 ${isSeniorMode ? 'text-2xl' : 'text-lg'}`}>
-                        <ShieldAlert className={isSeniorMode ? 'w-7 h-7 text-crypto-accent' : 'w-5 h-5 text-crypto-accent'} />
-                        {isSeniorMode ? t.results.executiveSummarySenior : t.results.executiveSummary}
-                    </h3>
-                    {analysis.verdict && (
-                      <p className={`text-gray-200 leading-relaxed font-medium ${isSeniorMode ? 'text-2xl' : 'text-lg'}`}>
-                        {analysis.verdict}
-                      </p>
-                    )}
-
-                    {/* Guidance Banner */}
-                    {!isSeniorMode ? (
-                      <a
-                        href="https://gemini.google.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-4 flex items-start gap-3 p-3 bg-crypto-accent/5 border border-crypto-accent/20 rounded-lg hover:bg-crypto-accent/10 transition-colors group cursor-pointer"
-                      >
-                        <Sparkles className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0" />
-                        <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors">
-                          {t.guidance.advancedInfo}
+            {/* 7. Simplified Analysis: bio summary + credibility/risk — hide in senior mode */}
+            {!isSeniorMode && (
+              <div className="mb-6 space-y-4">
+                {analysis.bioSummary && (
+                  <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+                    <p className="text-gray-300 leading-relaxed text-sm">{analysis.bioSummary}</p>
+                    <div className="flex gap-2 mt-3 flex-wrap">
+                      {analysis.source === 'cache' && (
+                        <span className="text-xs text-blue-400 bg-blue-900/20 border border-blue-800 px-2 py-0.5 rounded">
+                          {t.results.cachedResult}
+                          {analysis.cachedAt && (() => {
+                            const ageMs = Date.now() - analysis.cachedAt;
+                            const ageMinutes = Math.round(ageMs / 1000 / 60);
+                            const timeDisplay = ageMinutes < 60 ? `${ageMinutes}m` : `${Math.round(ageMinutes / 60)}h`;
+                            return ' · ' + t.results.cachedAgo.replace('{time}', timeDisplay);
+                          })()}
                         </span>
-                        <ExternalLink className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
-                      </a>
-                    ) : language === 'zh-TW' ? (
-                      <div className="mt-6 p-4 bg-blue-900/20 border border-blue-700 rounded-xl">
-                        <p className="text-lg text-blue-300">
-                          💡 {t.guidance.call165}
-                        </p>
-                      </div>
-                    ) : (
-                      <a
-                        href="https://gemini.google.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-4 flex items-start gap-3 p-3 bg-crypto-accent/5 border border-crypto-accent/20 rounded-lg hover:bg-crypto-accent/10 transition-colors group cursor-pointer"
-                      >
-                        <Sparkles className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0" />
-                        <span className="text-sm text-gray-300 group-hover:text-gray-200 transition-colors">
-                          {t.guidance.advancedInfo}
+                      )}
+                      {analysis.source === 'api' && (
+                        <span className="text-xs text-green-400 bg-green-900/20 border border-green-800 px-2 py-0.5 rounded">
+                          {t.results.liveAnalysis}
                         </span>
-                        <ExternalLink className="w-4 h-4 text-crypto-accent mt-0.5 flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" />
-                      </a>
-                    )}
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Credibility */}
+                  {analysis.credibilityStrengths && analysis.credibilityStrengths.length > 0 && (
+                    <div className="bg-crypto-card p-4 rounded-xl border border-gray-800">
+                      <h4 className="text-sm font-semibold text-crypto-success mb-3 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        {t.results.credibilityFactors}
+                      </h4>
+                      <ul className="space-y-2">
+                        {analysis.credibilityStrengths.map((s, i) => (
+                          <li key={i} className="flex items-start gap-2 text-gray-300 text-sm">
+                            <CheckCircle2 className="w-3 h-3 text-crypto-success mt-1 flex-shrink-0" />
+                            <span>{s}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {/* Risk Factors */}
+                  {analysis.riskFactors && analysis.riskFactors.length > 0 && (
+                    <div className="bg-crypto-card p-4 rounded-xl border border-gray-800">
+                      <h4 className="text-sm font-semibold text-orange-500 mb-3 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        {t.results.risksAndCriticisms}
+                      </h4>
+                      <ul className="space-y-2">
+                        {analysis.riskFactors.map((r, i) => (
+                          <li key={i} className="flex items-start gap-2 text-gray-300 text-sm">
+                            <AlertTriangle className="w-3 h-3 text-orange-500 mt-1 flex-shrink-0" />
+                            <span>{r}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-            </div>
+              </div>
+            )}
 
-            {/* Detailed Analysis Section: Two Columns - Hide in Senior Mode */}
+            {/* 8. Evidence Pack — copy/download */}
+            <EvidencePack
+              analysis={analysis}
+              language={language}
+              isSeniorMode={isSeniorMode}
+            />
+
+            {/* 9. Track Record Timeline */}
+            {!(isSeniorMode && analysis.inputType === 'SMS_TEXT') && analysis.history && analysis.history.length > 0 && (
+              <div className="mb-6">
+                <HistoryTimeline
+                  events={analysis.history}
+                  title={t.results.trackRecord}
+                  language={language}
+                />
+              </div>
+            )}
+
+            {/* 10. Compact Trust Meter — demoted to bottom */}
             {!isSeniorMode && (
               <div className="mb-8">
-                  <h3 className="text-xl font-bold text-white mb-6">{t.results.detailedAnalysis}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Left Column: Credibility Factors */}
-                      <div className="bg-crypto-card p-6 rounded-2xl border border-gray-800">
-                          <h4 className="text-lg font-semibold text-crypto-success mb-4 flex items-center gap-2">
-                              <CheckCircle2 className="w-5 h-5" />
-                              {t.results.credibilityFactors}
-                          </h4>
-                          <ul className="space-y-3">
-                              {analysis.credibilityStrengths && analysis.credibilityStrengths.length > 0 ? (
-                                analysis.credibilityStrengths.map((strength, idx) => (
-                                  <li key={idx} className="flex items-start gap-3 text-gray-300">
-                                      <CheckCircle2 className="w-4 h-4 text-crypto-success mt-1 flex-shrink-0" />
-                                      <span>{strength}</span>
-                                  </li>
-                                ))
-                              ) : (
-                                <li className="text-gray-500 italic">{t.results.noStrengths}</li>
-                              )}
-                          </ul>
-                      </div>
-
-                      {/* Right Column: Risks & Criticisms */}
-                      <div className="bg-crypto-card p-6 rounded-2xl border border-gray-800">
-                          <h4 className="text-lg font-semibold text-orange-500 mb-4 flex items-center gap-2">
-                              <AlertTriangle className="w-5 h-5" />
-                              {t.results.risksAndCriticisms}
-                          </h4>
-                          <ul className="space-y-3">
-                              {analysis.riskFactors && analysis.riskFactors.length > 0 ? (
-                                analysis.riskFactors.map((risk, idx) => (
-                                  <li key={idx} className="flex items-start gap-3 text-gray-300">
-                                      <AlertTriangle className="w-4 h-4 text-orange-500 mt-1 flex-shrink-0" />
-                                      <span>{risk}</span>
-                                  </li>
-                                ))
-                              ) : (
-                                <li className="text-gray-500 italic">{t.results.noRisks}</li>
-                              )}
-                          </ul>
-                      </div>
-                  </div>
+                <TrustMeter score={analysis.trustScore} language={language} />
               </div>
             )}
 
-            {/* Track Record Timeline - Hide in Senior Mode for SMS_TEXT type */}
-            {!(isSeniorMode && analysis.inputType === 'SMS_TEXT') && analysis.history && analysis.history.length > 0 && (
-              <div className={isSeniorMode ? 'mt-8' : ''}>
-                  <HistoryTimeline
-                    events={analysis.history}
-                    title={t.results.trackRecord}
-                    language={language}
-                  />
-              </div>
-            )}
+            {/* Gemini deeper-analysis link */}
+            <a
+              href="https://gemini.google.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-8 flex items-center gap-3 p-3 bg-crypto-accent/5 border border-crypto-accent/20 rounded-lg hover:bg-crypto-accent/10 transition-colors group"
+            >
+              <Sparkles className="w-4 h-4 text-crypto-accent flex-shrink-0" />
+              <span className={`text-gray-300 group-hover:text-gray-200 transition-colors ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>
+                {language === 'zh-TW' ? t.guidance.call165 : t.guidance.advancedInfo}
+              </span>
+              <ExternalLink className="w-4 h-4 text-crypto-accent flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity ml-auto" />
+            </a>
 
           </div>
         )}

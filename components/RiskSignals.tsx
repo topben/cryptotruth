@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertTriangle, AlertOctagon, Info, Shield } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, AlertOctagon, Info, Shield, ChevronDown } from 'lucide-react';
 import { RiskSignal, Language } from '../types';
 
 interface RiskSignalsProps {
@@ -17,6 +17,8 @@ const TRANSLATIONS = {
     warningLabel: 'WARNING',
     infoLabel: 'INFO',
     evidenceLabel: 'Evidence:',
+    showAll: 'Show all {n} signals',
+    showLess: 'Show less',
   },
   'zh-TW': {
     title: '為什麼這可能是詐騙',
@@ -26,6 +28,8 @@ const TRANSLATIONS = {
     warningLabel: '警告',
     infoLabel: '資訊',
     evidenceLabel: '證據：',
+    showAll: '顯示全部 {n} 個風險訊號',
+    showLess: '收起',
   },
   vi: {
     title: 'Tại sao đây có thể là lừa đảo',
@@ -35,6 +39,8 @@ const TRANSLATIONS = {
     warningLabel: 'CẢNH BÁO',
     infoLabel: 'THÔNG TIN',
     evidenceLabel: 'Bằng chứng:',
+    showAll: 'Hiện tất cả {n} tín hiệu',
+    showLess: 'Thu gọn',
   },
 };
 
@@ -56,11 +62,15 @@ const SIGNAL_TYPE_LABELS: Record<string, { en: string; 'zh-TW': string; vi: stri
   UNKNOWN: { en: 'Unverified Risk', 'zh-TW': '未驗證風險', vi: 'Rủi ro chưa xác minh' },
 };
 
+const VISIBLE_COUNT = 3;
+
 const RiskSignals: React.FC<RiskSignalsProps> = ({
   signals,
   language = 'en',
   isSeniorMode = false,
 }) => {
+  const [showAll, setShowAll] = useState(false);
+  const [expandedIdx, setExpandedIdx] = useState<Set<number>>(new Set([0, 1, 2]));
   const t = TRANSLATIONS[language as keyof typeof TRANSLATIONS] ?? TRANSLATIONS.en;
 
   if (!signals || signals.length === 0) {
@@ -80,48 +90,51 @@ const RiskSignals: React.FC<RiskSignalsProps> = ({
     return (order[a.level] ?? 2) - (order[b.level] ?? 2);
   });
 
+  const visibleSignals = showAll ? sortedSignals : sortedSignals.slice(0, VISIBLE_COUNT);
+  const hiddenCount = sortedSignals.length - VISIBLE_COUNT;
+
+  const toggleExpand = (idx: number) => {
+    setExpandedIdx(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
   const getSignalIcon = (level: string) => {
-    const iconClass = isSeniorMode ? 'w-8 h-8' : 'w-6 h-6';
+    const iconClass = isSeniorMode ? 'w-7 h-7' : 'w-5 h-5';
     switch (level) {
       case 'CRITICAL':
-        return <AlertOctagon className={`${iconClass} text-red-500`} />;
+        return <AlertOctagon className={`${iconClass} text-red-500 flex-shrink-0`} />;
       case 'WARNING':
-        return <AlertTriangle className={`${iconClass} text-orange-500`} />;
+        return <AlertTriangle className={`${iconClass} text-orange-500 flex-shrink-0`} />;
       default:
-        return <Info className={`${iconClass} text-blue-400`} />;
+        return <Info className={`${iconClass} text-blue-400 flex-shrink-0`} />;
     }
   };
 
   const getLevelLabel = (level: string) => {
     switch (level) {
-      case 'CRITICAL':
-        return t.criticalLabel;
-      case 'WARNING':
-        return t.warningLabel;
-      default:
-        return t.infoLabel;
+      case 'CRITICAL': return t.criticalLabel;
+      case 'WARNING': return t.warningLabel;
+      default: return t.infoLabel;
     }
   };
 
   const getLevelStyle = (level: string) => {
     switch (level) {
-      case 'CRITICAL':
-        return 'bg-red-900/30 border-red-700';
-      case 'WARNING':
-        return 'bg-orange-900/20 border-orange-700';
-      default:
-        return 'bg-blue-900/20 border-blue-700';
+      case 'CRITICAL': return 'border-red-800 bg-red-950/30';
+      case 'WARNING': return 'border-orange-800/60 bg-orange-950/20';
+      default: return 'border-blue-800/50 bg-blue-950/20';
     }
   };
 
   const getBadgeStyle = (level: string) => {
     switch (level) {
-      case 'CRITICAL':
-        return 'bg-red-500 text-white';
-      case 'WARNING':
-        return 'bg-orange-500 text-white';
-      default:
-        return 'bg-blue-500 text-white';
+      case 'CRITICAL': return 'bg-red-500 text-white';
+      case 'WARNING': return 'bg-orange-500 text-white';
+      default: return 'bg-blue-500 text-white';
     }
   };
 
@@ -131,38 +144,58 @@ const RiskSignals: React.FC<RiskSignalsProps> = ({
   };
 
   return (
-    <div className={`space-y-4 ${isSeniorMode ? 'mt-8' : 'mt-6'}`}>
-      <h3 className={`font-bold text-red-400 flex items-center gap-2 ${isSeniorMode ? 'text-2xl' : 'text-xl'}`}>
+    <div className={`${isSeniorMode ? 'mb-8' : 'mb-6'}`}>
+      <h3 className={`font-bold text-red-400 flex items-center gap-2 mb-4 ${isSeniorMode ? 'text-2xl' : 'text-xl'}`}>
         <AlertTriangle className={isSeniorMode ? 'w-8 h-8' : 'w-6 h-6'} />
         {isSeniorMode ? t.titleSenior : t.title}
       </h3>
 
-      <div className="space-y-3">
-        {sortedSignals.map((signal, idx) => (
-          <div
-            key={idx}
-            className={`border rounded-xl ${isSeniorMode ? 'p-6' : 'p-4'} ${getLevelStyle(signal.level)}`}
-          >
-            <div className="flex items-start gap-3">
-              {getSignalIcon(signal.level)}
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`font-bold ${isSeniorMode ? 'text-xl' : 'text-lg'} text-white`}>
+      <div className="space-y-2">
+        {visibleSignals.map((signal, idx) => {
+          const isExpanded = expandedIdx.has(idx);
+          return (
+            <div
+              key={idx}
+              className={`border rounded-xl overflow-hidden ${getLevelStyle(signal.level)}`}
+            >
+              <button
+                onClick={() => toggleExpand(idx)}
+                className={`w-full text-left flex items-center gap-3 transition-colors hover:bg-white/5 ${isSeniorMode ? 'p-5' : 'p-4'}`}
+              >
+                {getSignalIcon(signal.level)}
+                <div className="flex-1 flex items-center gap-2 min-w-0">
+                  <span className={`font-bold text-white truncate ${isSeniorMode ? 'text-xl' : 'text-base'}`}>
                     {getSignalTypeLabel(signal.type)}
                   </span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${getBadgeStyle(signal.level)}`}>
+                  <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-bold ${getBadgeStyle(signal.level)}`}>
                     {getLevelLabel(signal.level)}
                   </span>
                 </div>
-                <div className={`text-gray-300 ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>
-                  <span className="text-gray-400 font-medium">{t.evidenceLabel}</span>{' '}
-                  {signal.evidence}
+                <ChevronDown className={`flex-shrink-0 w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isExpanded && (
+                <div className={`border-t border-white/5 ${isSeniorMode ? 'px-5 py-4' : 'px-4 py-3'}`}>
+                  <span className={`text-gray-400 font-medium ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>{t.evidenceLabel}</span>{' '}
+                  <span className={`text-gray-300 ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>{signal.evidence}</span>
                 </div>
-              </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {hiddenCount > 0 && (
+        <button
+          onClick={() => setShowAll(s => !s)}
+          className={`mt-3 flex items-center gap-2 text-gray-400 hover:text-gray-200 transition-colors ${isSeniorMode ? 'text-lg' : 'text-sm'}`}
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform ${showAll ? 'rotate-180' : ''}`} />
+          {showAll
+            ? t.showLess
+            : t.showAll.replace('{n}', String(sortedSignals.length))}
+        </button>
+      )}
     </div>
   );
 };
