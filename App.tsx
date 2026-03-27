@@ -14,7 +14,7 @@ const UI_TEXT = {
   en: {
     appName: 'VerifyFirst',
     appNameHighlight: ' AI',
-    poweredBy: 'Powered by AWS, Gogolook & Claude',
+    poweredBy: 'Powered by tokimi & Gemini',
     seniorMode: 'Senior Mode',
     seniorModeOn: 'Easy Mode ON',
     seniorModeOff: 'Easy Mode OFF',
@@ -82,7 +82,7 @@ const UI_TEXT = {
   'zh-TW': {
     appName: 'VerifyFirst',
     appNameHighlight: ' AI',
-    poweredBy: '由 AWS、Gogolook 與 Claude 提供支援',
+    poweredBy: '由 tokimi 及 Gemini 提供支援',
     seniorMode: '長輩模式',
     seniorModeOn: '簡易模式 開啟',
     seniorModeOff: '簡易模式 關閉',
