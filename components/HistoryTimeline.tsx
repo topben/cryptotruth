@@ -19,10 +19,15 @@ const TRANSLATIONS = {
     noEvents: '未找到歷史紀錄事件。',
     viewSource: '查看來源',
   },
+  vi: {
+    title: 'Lịch sử',
+    noEvents: 'Không tìm thấy sự kiện lịch sử.',
+    viewSource: 'Xem nguồn',
+  },
 };
 
 const HistoryTimeline: React.FC<HistoryTimelineProps> = ({ events, title, language = 'en' }) => {
-  const t = TRANSLATIONS[language];
+  const t = TRANSLATIONS[language as keyof typeof TRANSLATIONS] ?? TRANSLATIONS.en;
   const displayTitle = title ?? t.title;
 
   if (!events || events.length === 0) {

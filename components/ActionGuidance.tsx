@@ -28,6 +28,15 @@ const TRANSLATIONS = {
     callNow: '立即撥打',
     tapToCall: '點擊撥打 165 反詐騙專線',
   },
+  vi: {
+    title: 'Hành động an toàn được đề xuất',
+    titleSenior: 'Bạn nên làm gì?',
+    highRisk: 'PHÁT HIỆN RỦI RO CAO',
+    mediumRisk: 'NÊN CẨN THẬN',
+    lowRisk: 'CÓ VẺ AN TOÀN',
+    callNow: 'Gọi ngay',
+    tapToCall: 'Nhấn để gọi đường dây chống lừa đảo',
+  },
 };
 
 const ActionGuidance: React.FC<ActionGuidanceProps> = ({
@@ -36,7 +45,7 @@ const ActionGuidance: React.FC<ActionGuidanceProps> = ({
   language = 'en',
   isSeniorMode = false,
 }) => {
-  const t = TRANSLATIONS[language];
+  const t = TRANSLATIONS[language as keyof typeof TRANSLATIONS] ?? TRANSLATIONS.en;
 
   // Determine risk level for styling
   const isHighRisk = scamProbability >= 70;

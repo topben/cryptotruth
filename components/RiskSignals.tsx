@@ -27,24 +27,33 @@ const TRANSLATIONS = {
     infoLabel: '資訊',
     evidenceLabel: '證據：',
   },
+  vi: {
+    title: 'Tại sao đây có thể là lừa đảo',
+    titleSenior: 'Dấu hiệu cảnh báo được phát hiện',
+    noSignals: 'Không phát hiện tín hiệu rủi ro cụ thể.',
+    criticalLabel: 'NGHIÊM TRỌNG',
+    warningLabel: 'CẢNH BÁO',
+    infoLabel: 'THÔNG TIN',
+    evidenceLabel: 'Bằng chứng:',
+  },
 };
 
 // Human-readable signal type names
-const SIGNAL_TYPE_LABELS: Record<string, { en: string; 'zh-TW': string }> = {
-  GUARANTEED_RETURNS: { en: 'Guaranteed Returns Promise', 'zh-TW': '保證獲利承諾' },
-  PRESSURE_TACTICS: { en: 'Pressure/Urgency Tactics', 'zh-TW': '壓力/催促手法' },
-  IMPERSONATION: { en: 'Impersonation Detected', 'zh-TW': '偵測到冒充行為' },
-  PHISHING_URL: { en: 'Suspicious/Phishing URL', 'zh-TW': '可疑/釣魚網址' },
-  TYPOSQUATTING: { en: 'Fake Domain (Typosquatting)', 'zh-TW': '假冒網域' },
-  KNOWN_SCAM: { en: 'Known Scam Pattern', 'zh-TW': '已知詐騙模式' },
-  SUSPICIOUS_PAYMENT: { en: 'Suspicious Payment Request', 'zh-TW': '可疑付款要求' },
-  CELEBRITY_IMPERSONATION: { en: 'Celebrity Impersonation', 'zh-TW': '冒充名人' },
-  PONZI_SIGNS: { en: 'Ponzi/MLM Characteristics', 'zh-TW': '龐氏/傳銷特徵' },
-  INSUFFICIENT_DATA: { en: 'Insufficient Verification Data', 'zh-TW': '驗證資料不足' },
-  RUG_PULL_HISTORY: { en: 'Rug Pull History', 'zh-TW': '捲款跑路紀錄' },
-  SCAM_ALLEGATION: { en: 'Scam Allegations Found', 'zh-TW': '發現詐騙指控' },
-  BOT_ACTIVITY: { en: 'Bot/Fake Activity Detected', 'zh-TW': '偵測到機器人/假活動' },
-  UNKNOWN: { en: 'Unverified Risk', 'zh-TW': '未驗證風險' },
+const SIGNAL_TYPE_LABELS: Record<string, { en: string; 'zh-TW': string; vi: string }> = {
+  GUARANTEED_RETURNS: { en: 'Guaranteed Returns Promise', 'zh-TW': '保證獲利承諾', vi: 'Hứa hẹn lợi nhuận đảm bảo' },
+  PRESSURE_TACTICS: { en: 'Pressure/Urgency Tactics', 'zh-TW': '壓力/催促手法', vi: 'Chiến thuật áp lực/thúc giục' },
+  IMPERSONATION: { en: 'Impersonation Detected', 'zh-TW': '偵測到冒充行為', vi: 'Phát hiện mạo danh' },
+  PHISHING_URL: { en: 'Suspicious/Phishing URL', 'zh-TW': '可疑/釣魚網址', vi: 'URL đáng ngờ/lừa đảo' },
+  TYPOSQUATTING: { en: 'Fake Domain (Typosquatting)', 'zh-TW': '假冒網域', vi: 'Tên miền giả mạo' },
+  KNOWN_SCAM: { en: 'Known Scam Pattern', 'zh-TW': '已知詐騙模式', vi: 'Mô hình lừa đảo đã biết' },
+  SUSPICIOUS_PAYMENT: { en: 'Suspicious Payment Request', 'zh-TW': '可疑付款要求', vi: 'Yêu cầu thanh toán đáng ngờ' },
+  CELEBRITY_IMPERSONATION: { en: 'Celebrity Impersonation', 'zh-TW': '冒充名人', vi: 'Mạo danh người nổi tiếng' },
+  PONZI_SIGNS: { en: 'Ponzi/MLM Characteristics', 'zh-TW': '龐氏/傳銷特徵', vi: 'Đặc điểm Ponzi/MLM' },
+  INSUFFICIENT_DATA: { en: 'Insufficient Verification Data', 'zh-TW': '驗證資料不足', vi: 'Dữ liệu xác minh không đủ' },
+  RUG_PULL_HISTORY: { en: 'Rug Pull History', 'zh-TW': '捲款跑路紀錄', vi: 'Lịch sử lừa đảo bỏ trốn' },
+  SCAM_ALLEGATION: { en: 'Scam Allegations Found', 'zh-TW': '發現詐騙指控', vi: 'Phát hiện cáo buộc lừa đảo' },
+  BOT_ACTIVITY: { en: 'Bot/Fake Activity Detected', 'zh-TW': '偵測到機器人/假活動', vi: 'Phát hiện hoạt động bot/giả mạo' },
+  UNKNOWN: { en: 'Unverified Risk', 'zh-TW': '未驗證風險', vi: 'Rủi ro chưa xác minh' },
 };
 
 const RiskSignals: React.FC<RiskSignalsProps> = ({
@@ -52,7 +61,7 @@ const RiskSignals: React.FC<RiskSignalsProps> = ({
   language = 'en',
   isSeniorMode = false,
 }) => {
-  const t = TRANSLATIONS[language];
+  const t = TRANSLATIONS[language as keyof typeof TRANSLATIONS] ?? TRANSLATIONS.en;
 
   if (!signals || signals.length === 0) {
     return (
@@ -118,7 +127,7 @@ const RiskSignals: React.FC<RiskSignalsProps> = ({
 
   const getSignalTypeLabel = (type: string): string => {
     const labels = SIGNAL_TYPE_LABELS[type] || SIGNAL_TYPE_LABELS.UNKNOWN;
-    return labels[language];
+    return labels[language as keyof typeof labels] ?? labels.en;
   };
 
   return (

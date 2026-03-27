@@ -67,7 +67,7 @@ export interface KOLAnalysis {
 
 export type LoadingState = 'IDLE' | 'SEARCHING' | 'ANALYZING' | 'COMPLETED' | 'ERROR';
 
-export type Language = 'en' | 'zh-TW';
+export type Language = 'en' | 'zh-TW' | 'vi';
 
 // ========== TruthGuard AI Types (Hackathon Modules) ==========
 

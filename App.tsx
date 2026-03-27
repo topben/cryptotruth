@@ -77,6 +77,13 @@ const UI_TEXT = {
     guidance: {
       advancedInfo: 'Want more details? Ask Gemini for a deeper analysis.',
       call165: 'Not sure? Call 165 (Taiwan Anti-Fraud Hotline) for free advice!'
+    },
+    inline: {
+      call165Btn: 'Call 165 for Help',
+      screenshot: 'Screenshot',
+      unknownIdentity: 'Unknown',
+      impersonator: 'Fake',
+      seniorHint: 'Got a suspicious message, link, or phone number? Paste it here and we\'ll check it for you!'
     }
   },
   'zh-TW': {
@@ -145,9 +152,91 @@ const UI_TEXT = {
     guidance: {
       advancedInfo: '想要更詳細的分析？請 Gemini 提供更深入的調查。',
       call165: '不確定嗎？撥打 165（反詐騙專線）免費諮詢！'
+    },
+    inline: {
+      call165Btn: '撥打 165 求助',
+      screenshot: '截圖分析',
+      unknownIdentity: '身分未明',
+      impersonator: '冒充者',
+      seniorHint: '收到可疑訊息、連結或電話？貼上來讓我們幫您檢查！'
+    }
+  },
+  vi: {
+    appName: 'VerifyFirst',
+    appNameHighlight: ' AI',
+    poweredBy: 'Được cung cấp bởi tokimi & Gemini',
+    seniorMode: 'Chế độ cao tuổi',
+    seniorModeOn: 'Chế độ đơn giản BẬT',
+    seniorModeOff: 'Chế độ đơn giản TẮT',
+    hero: {
+      title: 'Xác minh trước,',
+      titleHighlight: 'Tin tưởng sau',
+      subtitle: 'Phát hiện lừa đảo AI · Phân tích rủi ro · Hướng dẫn an toàn',
+      description: 'Dán tin nhắn, liên kết, tài khoản hoặc số điện thoại. AI phân tích mô hình lừa đảo và cho bạn biết rủi ro, lý do và các bước tiếp theo.',
+      descriptionSenior: 'Nhận được tin nhắn đáng ngờ? Dán vào đây và chúng tôi sẽ kiểm tra xem có an toàn không!'
+    },
+    loading: {
+      messages: [
+        'Đang kiểm tra mô hình lừa đảo...',
+        'Tìm kiếm cơ sở dữ liệu gian lận...',
+        'Đang phân tích nội dung...',
+        'Đối chiếu các nguồn...',
+        'Điều tra dấu hiệu đỏ...',
+        'Đang biên soạn báo cáo an toàn...'
+      ],
+      messagesSenior: [
+        'Đang kiểm tra xem có an toàn không...',
+        'Tìm kiếm dấu hiệu cảnh báo...',
+        'Sắp xong rồi...'
+      ],
+      wait: 'Quá trình này thường mất 15-30 giây',
+      waitSenior: 'Vui lòng đợi một chút...'
+    },
+    error: {
+      title: 'Kiểm tra thất bại',
+      titleSenior: 'Đã xảy ra sự cố',
+      tooManyRequests: 'Quá nhiều yêu cầu. Vui lòng đợi một lúc và thử lại.',
+      notFound: 'Không tìm thấy thông tin. Vui lòng thử lại.',
+      badRequest: 'Dữ liệu nhập không hợp lệ. Vui lòng kiểm tra lại.',
+      defaultMessage: 'Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.',
+      defaultMessageSenior: 'Chúng tôi không thể kiểm tra điều này. Vui lòng thử lại hoặc gọi đường dây hỗ trợ.'
+    },
+    common: {
+      unknown: 'Không rõ'
+    },
+    results: {
+      shareOnX: 'Chia sẻ lên X',
+      cachedAgo: '📦 Đã lưu cache {time} trước',
+      cachedResult: '📦 Kết quả đã lưu cache',
+      liveAnalysis: '🟢 Phân tích trực tiếp',
+      executiveSummary: 'Tóm tắt',
+      executiveSummarySenior: 'Có an toàn không?',
+      detailedAnalysis: 'Phân tích chi tiết',
+      credibilityFactors: 'Dấu hiệu an toàn',
+      risksAndCriticisms: 'Dấu hiệu cảnh báo',
+      noStrengths: 'Không tìm thấy dấu hiệu an toàn cụ thể',
+      noRisks: 'Không tìm thấy cảnh báo cụ thể',
+      trackRecord: 'Lịch sử'
+    },
+    share: {
+      tweetTemplate: 'Tôi vừa kiểm tra điều này trên VerifyFirst AI!\n\n📊 {verdict}\n🔍 Điểm an toàn: {score}/100\n\nTự kiểm tra tin nhắn đáng ngờ:\nhttps://cryptotruth.news'
+    },
+    search: {
+      newSearch: 'Kiểm tra thêm'
+    },
+    guidance: {
+      advancedInfo: 'Muốn biết thêm chi tiết? Hãy nhờ Gemini phân tích sâu hơn.',
+      call165: 'Không chắc chắn? Gọi đường dây hỗ trợ để được tư vấn miễn phí!'
+    },
+    inline: {
+      call165Btn: 'Gọi hỗ trợ',
+      screenshot: 'Phân tích ảnh chụp',
+      unknownIdentity: 'Danh tính không rõ',
+      impersonator: 'Giả mạo',
+      seniorHint: 'Nhận được tin nhắn, liên kết hoặc số điện thoại đáng ngờ? Dán vào đây để chúng tôi kiểm tra!'
     }
   }
-};
+} as const;
 
 const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('zh-TW');
@@ -174,7 +263,7 @@ const App: React.FC = () => {
   }, [loadingState, loadingMessages.length, isSeniorMode]);
 
   const toggleLanguage = () => {
-    setLanguage(prev => prev === 'en' ? 'zh-TW' : 'en');
+    setLanguage(prev => prev === 'zh-TW' ? 'en' : prev === 'en' ? 'vi' : 'zh-TW');
   };
 
   const toggleSeniorMode = () => {
@@ -289,7 +378,7 @@ const App: React.FC = () => {
               }`}
             >
               <Globe className={isSeniorMode ? 'w-5 h-5 text-crypto-accent' : 'w-4 h-4 text-crypto-accent'} />
-              <span className="text-white">{language === 'en' ? 'EN' : '繁中'}</span>
+              <span className="text-white">{language === 'en' ? 'EN' : language === 'zh-TW' ? '繁中' : 'VI'}</span>
             </button>
             <div className="text-xs text-gray-500 font-mono hidden md:block">
               {t.poweredBy}
@@ -351,7 +440,7 @@ const App: React.FC = () => {
                     href="tel:165"
                     className="inline-flex items-center gap-2 mt-6 px-8 py-4 bg-red-600 hover:bg-red-500 text-white text-xl font-bold rounded-xl"
                   >
-                    📞 {language === 'zh-TW' ? '撥打 165 求助' : 'Call 165 for Help'}
+                    📞 {t.inline.call165Btn}
                   </a>
                 )}
              </div>
@@ -418,7 +507,7 @@ const App: React.FC = () => {
                             <h2 className={`font-bold text-white mb-1 ${isSeniorMode ? 'text-3xl' : 'text-2xl'}`}>
                               {analysis.inputType === 'HANDLE' ? `@${analysis.handle}` :
                                analysis.inputType === 'URL' ? '🔗 URL' :
-                               analysis.inputType === 'IMAGE' ? '🖼️ ' + (language === 'zh-TW' ? '截圖分析' : 'Screenshot') :
+                               analysis.inputType === 'IMAGE' ? '🖼️ ' + t.inline.screenshot :
                                '💬 ' + (language === 'zh-TW' ? '訊息' : 'Message')}
                             </h2>
                             <p className={`text-crypto-muted font-mono mb-4 ${isSeniorMode ? 'text-base' : 'text-sm'}`}>
@@ -431,14 +520,14 @@ const App: React.FC = () => {
                             <span className={`bg-gray-700 text-gray-300 px-2 py-1 rounded border border-gray-600 ${
                               isSeniorMode ? 'text-sm' : 'text-xs'
                             }`}>
-                                ❓ {language === 'zh-TW' ? '身分未明' : 'Unknown'}
+                                ❓ {t.inline.unknownIdentity}
                             </span>
                         )}
                         {analysis.identityStatus === 'IMPERSONATOR' && (
                             <span className={`bg-red-900/50 text-red-400 px-2 py-1 rounded border border-red-800 animate-pulse ${
                               isSeniorMode ? 'text-sm' : 'text-xs'
                             }`}>
-                                ⚠️ {language === 'zh-TW' ? '冒充者' : 'Fake'}
+                                ⚠️ {t.inline.impersonator}
                             </span>
                         )}
                     </div>

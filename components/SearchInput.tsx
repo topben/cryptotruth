@@ -50,6 +50,25 @@ const TRANSLATIONS = {
     imageReady: '截圖已就緒，點擊「檢查」開始分析',
     pasteImage: '或直接貼上截圖（Ctrl+V）',
   },
+  vi: {
+    placeholder: 'Dán liên kết, số điện thoại, @tài khoản hoặc tin nhắn đáng ngờ...',
+    placeholderSenior: 'Dán bất kỳ liên kết, số điện thoại hoặc tin nhắn đáng ngờ vào đây...',
+    scanning: 'Đang quét...',
+    scanningSenior: 'Đang kiểm tra...',
+    audit: 'Kiểm tra',
+    auditSenior: 'Có an toàn không?',
+    detected: {
+      HANDLE: 'Tài khoản',
+      URL: 'Liên kết',
+      SMS_TEXT: 'Tin nhắn',
+      PHONE: 'Số điện thoại',
+    },
+    detectedLabel: 'Phát hiện:',
+    scenarioHint: 'Các tình huống lừa đảo phổ biến — nhấn để thử ví dụ:',
+    uploadImage: 'Tải ảnh chụp màn hình',
+    imageReady: 'Ảnh chụp màn hình đã sẵn sàng — nhấn Kiểm tra để phân tích',
+    pasteImage: 'hoặc dán ảnh chụp màn hình (Ctrl+V)',
+  },
 };
 
 // Scenario chips — each fills the input with a representative example
@@ -369,6 +388,8 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
           <p className="text-xl text-gray-300">
             {language === 'zh-TW'
               ? '收到可疑訊息、連結或電話？貼上來讓我們幫您檢查！'
+              : language === 'vi'
+              ? 'Nhận được tin nhắn, liên kết hoặc số điện thoại đáng ngờ? Dán vào đây để chúng tôi kiểm tra!'
               : 'Got a suspicious message, link, or phone number? Paste it here and we\'ll check it for you!'}
           </p>
         </div>

@@ -23,10 +23,18 @@ const TRANSLATIONS = {
     risky: '風險較高',
     scammer: '詐騙警示',
   },
+  vi: {
+    label: 'Điểm tin cậy',
+    legend: 'HUYỀN THOẠI',
+    trusted: 'ĐÁNG TIN',
+    mixed: 'HỖN HỢP',
+    risky: 'RỦI RO',
+    scammer: 'CẢNH BÁO LỪA ĐẢO',
+  },
 };
 
 const TrustMeter: React.FC<TrustMeterProps> = ({ score, language }) => {
-  const t = TRANSLATIONS[language];
+  const t = TRANSLATIONS[language as keyof typeof TRANSLATIONS] ?? TRANSLATIONS.en;
 
   // Color calculation based on score
   const getColor = (val: number) => {
