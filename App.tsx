@@ -23,8 +23,9 @@ const UI_TEXT = {
     appNameHighlight: ' AI',
     poweredBy: 'Powered by tokimi & Gemini',
     seniorMode: 'Senior Mode',
-    seniorModeOn: 'Easy Mode ON',
-    seniorModeOff: 'Easy Mode OFF',
+    seniorModeOn: '👴 Senior Mode ON',
+    seniorModeOff: '👴 Senior Mode',
+    seniorModeDesc: 'Larger text · Simpler results',
     hero: {
       title: 'Verify First,',
       titleHighlight: 'Trust Later',
@@ -99,8 +100,9 @@ const UI_TEXT = {
     appNameHighlight: ' AI',
     poweredBy: '由 tokimi 及 Gemini 提供支援',
     seniorMode: '長輩模式',
-    seniorModeOn: '簡易模式 開啟',
-    seniorModeOff: '簡易模式 關閉',
+    seniorModeOn: '👴 長輩模式 開啟中',
+    seniorModeOff: '👴 長輩模式',
+    seniorModeDesc: '大字版・適合長者使用',
     hero: {
       title: '先驗證，',
       titleHighlight: '再相信',
@@ -175,8 +177,9 @@ const UI_TEXT = {
     appNameHighlight: ' AI',
     poweredBy: 'Được cung cấp bởi tokimi & Gemini',
     seniorMode: 'Chế độ cao tuổi',
-    seniorModeOn: 'Chế độ đơn giản BẬT',
-    seniorModeOff: 'Chế độ đơn giản TẮT',
+    seniorModeOn: '👴 Chế độ cao tuổi BẬT',
+    seniorModeOff: '👴 Chế độ cao tuổi',
+    seniorModeDesc: 'Chữ lớn · Dành cho người cao tuổi',
     hero: {
       title: 'Xác minh trước,',
       titleHighlight: 'Tin tưởng sau',
@@ -367,20 +370,24 @@ const App: React.FC = () => {
           </a>
           <div className="flex items-center gap-3">
             {/* Senior Mode Toggle */}
-            <button
-              onClick={toggleSeniorMode}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors font-medium ${
-                isSeniorMode
-                  ? 'bg-green-600 hover:bg-green-500 border-green-500 text-white'
-                  : 'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300'
-              } ${isSeniorMode ? 'text-base px-4 py-2' : 'text-sm'}`}
-            >
-              <Accessibility className={isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'} />
-              <span className="hidden sm:inline">
-                {isSeniorMode ? t.seniorModeOn : t.seniorModeOff}
-              </span>
-              <Eye className={`${isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'} sm:hidden`} />
-            </button>
+            <div className="flex flex-col items-center gap-0.5">
+              <button
+                onClick={toggleSeniorMode}
+                className={`flex items-center gap-1.5 rounded-xl border-2 font-bold transition-all ${
+                  isSeniorMode
+                    ? 'bg-green-600 hover:bg-green-500 border-green-400 text-white shadow-lg shadow-green-900/40 px-4 py-2 text-base'
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/60 text-amber-300 hover:border-amber-400 px-3 py-1.5 text-sm'
+                }`}
+              >
+                <Accessibility className={isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'} />
+                <span>{isSeniorMode ? t.seniorModeOn : t.seniorModeOff}</span>
+              </button>
+              {!isSeniorMode && (
+                <span className="text-xs text-amber-500/70 hidden sm:block whitespace-nowrap">
+                  {(t as typeof UI_TEXT['zh-TW']).seniorModeDesc}
+                </span>
+              )}
+            </div>
             {/* Language Dropdown */}
             <div className="relative" ref={langMenuRef}>
               <button
@@ -424,8 +431,33 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className={`container mx-auto px-4 ${isSeniorMode ? 'mt-8' : 'mt-12'}`}>
 
+        {/* Senior mode banner — shown on landing page when NOT in senior mode */}
+        {!isSeniorMode && !analysis && loadingState === 'IDLE' && (
+          <div className="max-w-2xl mx-auto mb-4 mt-8">
+            <button
+              onClick={toggleSeniorMode}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-amber-500/8 border border-amber-500/30 hover:bg-amber-500/15 hover:border-amber-500/50 transition-all group"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl select-none">👴</span>
+                <div className="text-left">
+                  <p className={`font-semibold text-amber-300 ${seniorModeStyles.text}`}>
+                    {language === 'zh-TW' ? '給長輩用：開啟大字版' : language === 'vi' ? 'Dành cho người cao tuổi: Bật chữ lớn' : 'For seniors: Switch to large text mode'}
+                  </p>
+                  <p className="text-xs text-amber-500/70 mt-0.5">
+                    {language === 'zh-TW' ? '字體更大・結果更簡單・適合長者閱讀' : language === 'vi' ? 'Chữ lớn hơn · Đơn giản hơn · Dễ đọc hơn' : 'Bigger text · Simpler results · Easier to read'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-amber-400 text-sm font-medium group-hover:underline whitespace-nowrap">
+                {language === 'zh-TW' ? '開啟 →' : language === 'vi' ? 'Bật →' : 'Turn on →'}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* Hero / Search */}
-        <div className={`transition-all duration-500 ease-in-out ${analysis ? 'mt-0' : isSeniorMode ? 'mt-10' : 'mt-20'}`}>
+        <div className={`transition-all duration-500 ease-in-out ${analysis ? 'mt-0' : isSeniorMode ? 'mt-6' : 'mt-14'}`}>
             <div className={`text-center ${isSeniorMode ? 'mb-8' : 'mb-10'}`}>
                 <h1 className={`font-display font-bold text-white mb-4 ${seniorModeStyles.heading}`}>
                     {t.hero.title} <span className="text-transparent bg-clip-text bg-gradient-to-r from-crypto-accent to-blue-500">{t.hero.titleHighlight}</span>
@@ -504,76 +536,79 @@ const App: React.FC = () => {
               />
             )}
 
-            {/* ── 3. Possible loss / control-loss section ── */}
-            <LossRiskPanel
-              scamProbability={analysis.scamProbability}
-              language={language}
-              isSeniorMode={isSeniorMode}
-            />
+            {/* ── 3–9: Full detail (hidden in senior mode for simplicity) ── */}
+            {!isSeniorMode && (
+              <>
+                <LossRiskPanel
+                  scamProbability={analysis.scamProbability}
+                  language={language}
+                  isSeniorMode={false}
+                />
 
-            {/* ── 4. Rebuttal-script counter-manipulation cards ── */}
-            {analysis.riskSignals && analysis.riskSignals.length > 0 && (
-              <TacticCards
-                signals={analysis.riskSignals}
-                language={language}
-                isSeniorMode={isSeniorMode}
-              />
+                {analysis.riskSignals && analysis.riskSignals.length > 0 && (
+                  <TacticCards
+                    signals={analysis.riskSignals}
+                    language={language}
+                    isSeniorMode={false}
+                  />
+                )}
+
+                {analysis.riskSignals && analysis.riskSignals.length > 0 && (
+                  <RiskSignals
+                    signals={analysis.riskSignals}
+                    language={language}
+                    isSeniorMode={false}
+                  />
+                )}
+
+                {analysis.riskSignals && analysis.riskSignals.length > 0 && (
+                  <ScamScriptBreakdown
+                    signals={analysis.riskSignals}
+                    scamProbability={analysis.scamProbability}
+                    language={language}
+                    isSeniorMode={false}
+                  />
+                )}
+              </>
             )}
 
-            {/* ── 5. Top 3 red flags + expandable evidence chain ── */}
-            {analysis.riskSignals && analysis.riskSignals.length > 0 && (
-              <RiskSignals
-                signals={analysis.riskSignals}
-                language={language}
-                isSeniorMode={isSeniorMode}
-              />
-            )}
-
-            {/* ── 6. Scam script / playbook breakdown ── */}
-            {analysis.riskSignals && analysis.riskSignals.length > 0 && (
-              <ScamScriptBreakdown
-                signals={analysis.riskSignals}
-                scamProbability={analysis.scamProbability}
-                language={language}
-                isSeniorMode={isSeniorMode}
-              />
-            )}
-
-            {/* ── 7. Rescue mode — "I already did X, what now?" ── */}
+            {/* ── Rescue mode — shown in both modes ── */}
             <RescueMode
               scamProbability={analysis.scamProbability}
               language={language}
               isSeniorMode={isSeniorMode}
             />
 
-            {/* ── 8a. Official verification shortcuts ── */}
-            <OfficialVerification
-              originalInput={analysis.originalInput}
-              inputType={analysis.inputType}
-              scamProbability={analysis.scamProbability}
-              language={language}
-              isSeniorMode={isSeniorMode}
-            />
-
-            {/* ── 8b. Reporting pack / police pack ── */}
-            <EvidencePack
-              analysis={analysis}
-              language={language}
-              isSeniorMode={isSeniorMode}
-            />
-
-            {/* ── 9. Recent history ── */}
-            {!(isSeniorMode && analysis.inputType === 'SMS_TEXT') && analysis.history && analysis.history.length > 0 && (
-              <div className="mb-6">
-                <HistoryTimeline
-                  events={analysis.history}
-                  title={t.results.trackRecord}
+            {/* ── Official verification + evidence pack (non-senior only) ── */}
+            {!isSeniorMode && (
+              <>
+                <OfficialVerification
+                  originalInput={analysis.originalInput}
+                  inputType={analysis.inputType}
+                  scamProbability={analysis.scamProbability}
                   language={language}
+                  isSeniorMode={false}
                 />
-              </div>
+
+                <EvidencePack
+                  analysis={analysis}
+                  language={language}
+                  isSeniorMode={false}
+                />
+
+                {analysis.history && analysis.history.length > 0 && (
+                  <div className="mb-6">
+                    <HistoryTimeline
+                      events={analysis.history}
+                      title={t.results.trackRecord}
+                      language={language}
+                    />
+                  </div>
+                )}
+              </>
             )}
 
-            {/* ── Below the fold: analysis detail + trust meter ── */}
+            {/* ── Below the fold: analysis detail + trust meter (non-senior) ── */}
             {!isSeniorMode && (
               <div className="mb-6 space-y-4">
                 {analysis.bioSummary && (
