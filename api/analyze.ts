@@ -1,22 +1,17 @@
 import { GoogleGenAI } from "@google/genai";
 import { list, put } from "@vercel/blob";
-import {
-  checkUrl,
-  checkNumber,
-  extractUrls,
-  extractPhoneNumbers,
-  summarizeUrlResult,
-  summarizeNumberResult,
-} from "../services/gogolookService.js";
-import {
-  checkUrlAgainstDataset,
-  analyzeSmsText,
-  isFacebookAdUrl,
-  getSocialMediaAdContext,
-  maskPII,
-  LOAN_SCAM_SMS_EXAMPLES,
-  ACCOUNT_ALERT_SMS_EXAMPLES,
-} from "../services/scamDatasets.js";
+/**
+ * Mask phone numbers and LINE IDs to protect PII before caching.
+ */
+const maskPII = (text: string): string => {
+  if (!text) return text;
+  let t = text;
+  // Taiwan mobile: 09xxxxxxxx → 09xx-***-***
+  t = t.replace(/0[9]\d{8}/g, m => m.slice(0, 4) + '-***-***');
+  // International +886: +886-9xx-xxx-xxx
+  t = t.replace(/\+886[-\s]?9\d{2}[-\s]?\d{3}[-\s]?\d{3}/g, '+886-9xx-***-***');
+  return t;
+};
 
 // Configuration
 const CACHE_DURATION_MS = 72 * 60 * 60 * 1000; // 72 hours
@@ -404,94 +399,6 @@ const setCachedAnalysis = async (handle: string, language: string, data: any) =>
   }
 };
 
-/**
- * Fetch external scam signals from the hackathon dataset + Gogolook APIs
- * (ScamAdviser + Whoscall), returning a formatted string for the Gemini prompt.
- *
- * Detection layers by input type:
- *  URL      → dataset (exact/domain/typosquatting/TLD) → ScamAdviser API
- *  SMS_TEXT → SMS classifier + keyword scan → URL sub-checks → Whoscall phone check
- *  URL (Facebook Ads) → social media ad context
- */
-const fetchExternalContext = async (input: string, inputType: string): Promise<string> => {
-  const sections: string[] = [];
-
-  if (inputType === 'URL') {
-    // Layer 1: Social media ad detection (Facebook Ads Library)
-    if (isFacebookAdUrl(input)) {
-      sections.push(getSocialMediaAdContext());
-    }
-
-    // Layer 2: Hackathon dataset check (exact → domain → typosquatting → TLD)
-    const datasetMatch = checkUrlAgainstDataset(input);
-    if (datasetMatch.matched) {
-      sections.push(
-        `HACKATHON DATASET MATCH:\n` +
-        `- Scam Type: ${datasetMatch.scamType}\n` +
-        `- ${datasetMatch.detail}`
-      );
-    }
-
-    // Layer 3: ScamAdviser via Gogolook API (cache-first)
-    const scamAdviserResult = await checkUrl(input);
-    if (scamAdviserResult) sections.push(summarizeUrlResult(input, scamAdviserResult));
-
-  } else if (inputType === 'SMS_TEXT') {
-    // Layer 1: SMS classifier — scam type + keyword signals + relevant few-shot examples
-    const smsAnalysis = analyzeSmsText(input);
-    if (smsAnalysis.signals.length > 0 || smsAnalysis.scamType !== 'UNKNOWN') {
-      sections.push(
-        `HACKATHON DATASET SMS ANALYSIS:\n` +
-        `- Detected Scam Type: ${smsAnalysis.scamType}\n` +
-        (smsAnalysis.signals.length > 0 ? smsAnalysis.signals.map(s => `- ${s}`).join('\n') : '') +
-        `\n\nREFERENCE EXAMPLES (${smsAnalysis.scamType}):\n` +
-        smsAnalysis.relevantExamples.map((ex, i) => `  [${i + 1}] ${ex.slice(0, 150)}`).join('\n')
-      );
-    } else {
-      // No keyword match — provide generic few-shot examples to calibrate Gemini
-      sections.push(
-        `REFERENCE SCAM SMS EXAMPLES (from Taiwan hackathon competition dataset):\n` +
-        [...LOAN_SCAM_SMS_EXAMPLES.slice(0, 2), ...ACCOUNT_ALERT_SMS_EXAMPLES.slice(0, 2)]
-          .map((ex, i) => `  [${i + 1}] ${ex.slice(0, 150)}`).join('\n')
-      );
-    }
-
-    // Layer 2: Check URLs embedded in SMS against dataset + ScamAdviser (parallel)
-    const urls = extractUrls(input);
-    if (urls.length > 0) {
-      const urlDatasetChecks = urls.map(u => ({ url: u, match: checkUrlAgainstDataset(u) }));
-      const urlApiResults = await Promise.all(urls.map(url => checkUrl(url)));
-
-      urlDatasetChecks.forEach(({ url, match }) => {
-        if (match.matched) {
-          sections.push(
-            `DATASET MATCH for embedded URL "${url}":\n- Scam Type: ${match.scamType}\n- ${match.detail}`
-          );
-        }
-      });
-      urlApiResults.forEach((result, i) => {
-        if (result) sections.push(summarizeUrlResult(urls[i], result));
-      });
-    }
-
-    // Layer 3: Check phone numbers via Whoscall (sequential, 1 RPS limit)
-    const phones = extractPhoneNumbers(input);
-    for (const { country, number } of phones) {
-      const result = await checkNumber(country, number);
-      if (result) sections.push(summarizeNumberResult(number, result));
-    }
-
-  } else if (inputType === 'PHONE') {
-    // Direct phone number check via Whoscall
-    const phones = extractPhoneNumbers(input);
-    const target = phones.length > 0 ? phones[0] : { country: 'TW', number: input };
-    const result = await checkNumber(target.country, target.number);
-    if (result) sections.push(summarizeNumberResult(target.number, result));
-  }
-
-  if (sections.length === 0) return '';
-  return `\n--- EXTERNAL VERIFICATION DATA (use this to improve accuracy) ---\n${sections.join('\n\n')}\n---\n`;
-};
 
 export default async function handler(req: any, res: any) {
   // Only allow POST
@@ -589,9 +496,6 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // === FETCH EXTERNAL SIGNALS (ScamAdviser + Whoscall) ===
-    const externalContext = await fetchExternalContext(sanitizedInput, detectedType);
-
     // === CALL GEMINI API ===
     const ai = new GoogleGenAI({ apiKey });
 
@@ -649,13 +553,13 @@ OUTPUT JSON ONLY:
 TASK: 執行「防詐識別分析」- Suspicious URL Analysis
 ANALYSIS TARGET: URL "${sanitizedInput}"
 LANGUAGE: ${langInstruction}
-${externalContext}
+
 INSTRUCTIONS:
 1. Use Google Search to research this URL/domain.
 2. Search for: "${sanitizedInput} scam", "${sanitizedInput} fraud", "${sanitizedInput} 詐騙", "site:165.npa.gov.tw ${new URL(sanitizedInput).hostname}", "${new URL(sanitizedInput).hostname} phishing".
 3. Check if this domain is on blocklists, reported as phishing, or associated with scams.
 4. Analyze the URL structure for suspicious patterns (typosquatting, misleading subdomains, etc.)
-5. Incorporate the external ScamAdviser data provided above into your scoring.
+5. Check for typosquatting, suspicious URL structures, and domain reputation signals.
 ${scamDetectionInstructions}
 
 CRITICAL RULE FOR RISK SIGNALS:
@@ -666,7 +570,7 @@ CRITICAL RULE FOR RISK SIGNALS:
 
 SCORING:
 - trustScore: 0(Dangerous)-100(Safe). <20: Confirmed Scam Site. 20-40: High Risk. 40-60: Suspicious. >80: Likely Safe.
-- scamProbability: Based on domain reputation, URL patterns, ScamAdviser data, and search results.
+- scamProbability: Based on domain reputation, URL patterns, and search results.
 
 OUTPUT JSON ONLY:
 {
@@ -688,12 +592,12 @@ OUTPUT JSON ONLY:
 TASK: 執行「防詐識別分析」- Phone Number Reputation Check
 ANALYSIS TARGET: Phone Number "${sanitizedInput}"
 LANGUAGE: ${langInstruction}
-${externalContext}
+
 INSTRUCTIONS:
 1. Use Google Search to research this phone number's reputation.
 2. Search for: "${sanitizedInput} scam", "${sanitizedInput} 詐騙", "${sanitizedInput} 詐欺", "${sanitizedInput} spam", "165 ${sanitizedInput}".
 3. Check if this number has been reported to Taiwan's 165 anti-fraud hotline or international scam databases.
-4. Incorporate the Whoscall data provided above into your scoring.
+4. Look up any available reports about this phone number online.
 ${scamDetectionInstructions}
 
 PHONE SCAM TYPES TO CHECK:
@@ -705,7 +609,7 @@ PHONE SCAM TYPES TO CHECK:
 
 SCORING:
 - trustScore: 0(Confirmed Scam)-100(Legitimate). <20: Confirmed Scam Number. 20-40: High Risk. 40-60: Suspicious/Unknown. >80: Likely Safe.
-- scamProbability: Based on Whoscall data, search results, and known scam patterns.
+- scamProbability: Based on search results and known scam patterns.
 
 OUTPUT JSON ONLY:
 {
@@ -731,13 +635,13 @@ ANALYSIS TARGET: Message Content:
 ${sanitizedInput}
 """
 LANGUAGE: ${langInstruction}
-${externalContext}
+
 INSTRUCTIONS:
 1. Analyze this message for common scam patterns.
 2. If it contains URLs or phone numbers, research them via Google Search.
 3. Check for language patterns commonly used in Taiwan/Asia scams (investment scams, romance scams, impersonation).
 4. Search for: any phone numbers or URLs in the message, common scam phrases used.
-5. Incorporate the external ScamAdviser/Whoscall data provided above into your scoring.
+5. Search for any URLs or phone numbers embedded in the message.
 ${scamDetectionInstructions}
 
 SPECIFIC SCAM TYPES TO CHECK:

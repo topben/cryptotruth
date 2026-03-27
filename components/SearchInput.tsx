@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { Search, Loader2, TrendingUp, AlertTriangle, Shield, Link, MessageSquare, AtSign, Phone } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Search, Loader2, AtSign, Link, Phone, MessageSquare, ImagePlus, X } from 'lucide-react';
 import { Language, InputType } from '../types';
 
 type InputMode = 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE';
 
 interface SearchInputProps {
-  onSearch: (input: string, inputType?: InputType) => void;
+  onSearch: (input: string, inputType?: InputType, imageData?: { base64: string; mediaType: string }) => void;
   isLoading: boolean;
   language: Language;
   isSeniorMode?: boolean;
@@ -13,338 +13,358 @@ interface SearchInputProps {
 
 const TRANSLATIONS = {
   en: {
-    placeholder: {
-      HANDLE: 'Enter Twitter/X handle...',
-      URL: 'Paste suspicious URL here...',
-      SMS_TEXT: 'Paste suspicious message here...',
-      PHONE: 'Enter phone number (e.g. +886912345678)...',
-    },
-    placeholderSenior: {
-      HANDLE: 'Type the account name...',
-      URL: 'Paste the link here...',
-      SMS_TEXT: 'Paste the message here...',
-      PHONE: 'Type the phone number here...',
-    },
+    placeholder: 'Paste a link, phone number, @handle, or suspicious message...',
+    placeholderSenior: 'Paste any suspicious link, phone number, or message here...',
     scanning: 'Scanning...',
     scanningSenior: 'Checking...',
     audit: 'Check',
     auditSenior: 'Is This Safe?',
-    inputModes: {
+    detected: {
       HANDLE: 'Account',
       URL: 'Link',
       SMS_TEXT: 'Message',
-      PHONE: 'Phone',
+      PHONE: 'Phone Number',
     },
-    inputModesSenior: {
-      HANDLE: 'Check Account',
-      URL: 'Check Link',
-      SMS_TEXT: 'Check Message',
-      PHONE: 'Check Phone',
-    },
-    categories: {
-      controversial: 'Controversial',
-      investigators: 'Investigators',
-      influencers: 'Influencers',
-    },
-    suggestedHandles: {
-      zhusu: '3AC Co-founder',
-      kyleLDavies: '3AC Co-founder',
-      sbfFtx: 'FTX Founder',
-      zachxbt: 'On-chain Sleuth',
-      coffeebreak: 'Scam Investigator',
-      cobie: 'Crypto Trader',
-      pentosh1: 'Crypto Analyst',
-      gainzy222: 'Trading Influencer',
-    },
-    exampleScams: {
-      fakeInvestment: 'Fake Investment',
-      phishingLink: 'Phishing Link',
-    },
+    detectedLabel: 'Detected:',
+    scenarioHint: 'Common scam scenarios — click to try an example:',
+    uploadImage: 'Upload Screenshot',
+    imageReady: 'Screenshot ready — click Check to analyze',
+    pasteImage: 'or paste a screenshot (Ctrl+V)',
   },
   'zh-TW': {
-    placeholder: {
-      HANDLE: '輸入 Twitter/X 帳號...',
-      URL: '貼上可疑網址...',
-      SMS_TEXT: '貼上可疑訊息內容...',
-      PHONE: '輸入電話號碼（如 0912345678）...',
-    },
-    placeholderSenior: {
-      HANDLE: '請輸入帳號名稱...',
-      URL: '請貼上網址連結...',
-      SMS_TEXT: '請貼上收到的訊息...',
-      PHONE: '請輸入電話號碼...',
-    },
+    placeholder: '貼上網址、電話號碼、@帳號或可疑訊息...',
+    placeholderSenior: '把可疑的連結、電話號碼或訊息貼在這裡...',
     scanning: '掃描中...',
     scanningSenior: '檢查中...',
     audit: '檢查',
     auditSenior: '這安全嗎？',
-    inputModes: {
+    detected: {
       HANDLE: '帳號',
       URL: '網址',
       SMS_TEXT: '訊息',
-      PHONE: '電話',
+      PHONE: '電話號碼',
     },
-    inputModesSenior: {
-      HANDLE: '查帳號',
-      URL: '查網址',
-      SMS_TEXT: '查訊息',
-      PHONE: '查電話',
-    },
-    categories: {
-      controversial: '爭議人物',
-      investigators: '調查員',
-      influencers: '意見領袖',
-    },
-    suggestedHandles: {
-      zhusu: '3AC 聯合創辦人',
-      kyleLDavies: '3AC 聯合創辦人',
-      sbfFtx: 'FTX 創辦人',
-      zachxbt: '鏈上偵探',
-      coffeebreak: '詐騙調查員',
-      cobie: '加密貨幣交易員',
-      pentosh1: '加密貨幣分析師',
-      gainzy222: '交易意見領袖',
-    },
-    exampleScams: {
-      fakeInvestment: '假投資',
-      phishingLink: '釣魚連結',
-    },
+    detectedLabel: '偵測到：',
+    scenarioHint: '常見詐騙情境，點擊體驗範例：',
+    uploadImage: '上傳截圖',
+    imageReady: '截圖已就緒，點擊「檢查」開始分析',
+    pasteImage: '或直接貼上截圖（Ctrl+V）',
   },
 };
 
-// Categorized interesting handles for quick search
-const SUGGESTED_HANDLES = {
-  controversial: [
-    { handle: 'zhusu', label: 'Zhu Su', noteKey: 'zhusu' as const },
-    { handle: 'KyleLDavies', label: 'Kyle Davies', noteKey: 'kyleLDavies' as const },
-    { handle: 'SBF_FTX', label: 'SBF', noteKey: 'sbfFtx' as const },
-  ],
-  investigators: [
-    { handle: 'zachxbt', label: 'ZachXBT', noteKey: 'zachxbt' as const },
-    { handle: 'coffeebreak_YT', label: 'Coffeezilla', noteKey: 'coffeebreak' as const },
-  ],
-  influencers: [
-    { handle: 'cobie', label: 'Cobie', noteKey: 'cobie' as const },
-    { handle: 'pentosh1', label: 'Pentoshi', noteKey: 'pentosh1' as const },
-    { handle: 'gainzy222', label: 'Gainzy', noteKey: 'gainzy222' as const },
-  ]
+// Scenario chips — each fills the input with a representative example
+const SCENARIO_CHIPS: Array<{
+  id: string;
+  icon: string;
+  label: { en: string; 'zh-TW': string };
+  sample: string;
+}> = [
+  {
+    id: 'social_ad',
+    icon: '📢',
+    label: { en: 'Social Media Ad', 'zh-TW': '社群廣告' },
+    sample: 'https://bit.ly/3invest-now-crypto',
+  },
+  {
+    id: 'celeb_invest',
+    icon: '💰',
+    label: { en: 'Fake Celebrity Investment', 'zh-TW': '假名人投資' },
+    sample: '馬斯克推薦：每月保證30%報酬！立即點擊加入 https://elon-crypto-tw.com',
+  },
+  {
+    id: 'customer_service',
+    icon: '📞',
+    label: { en: 'Fake Customer Service', 'zh-TW': '客服詐騙' },
+    sample: '您好，我是台灣銀行客服，您的帳戶出現異常交易，請立即撥打 02-1234-5678 處理',
+  },
+  {
+    id: 'phishing_sms',
+    icon: '📩',
+    label: { en: 'Phishing SMS', 'zh-TW': '釣魚簡訊' },
+    sample: '您的包裹無法投遞，請點擊更新地址：https://post-tw-delivery.net/verify',
+  },
+  {
+    id: 'fake_account',
+    icon: '🎭',
+    label: { en: 'Fake Official Account', 'zh-TW': '假官方帳號' },
+    sample: '@TaiwanBank_Official',
+  },
+  {
+    id: 'fake_giveaway',
+    icon: '🎁',
+    label: { en: 'Fake Giveaway', 'zh-TW': '假抽獎/假活動' },
+    sample: '恭喜您中獎！請點擊領取 iPhone 15：https://apple-lucky-tw.com/prize',
+  },
+];
+
+const detectInputType = (value: string): InputMode => {
+  const trimmed = value.trim();
+  if (!trimmed) return 'SMS_TEXT';
+
+  // Phone: starts with + or digits only, 7–15 digits, short
+  const digitsOnly = trimmed.replace(/[\s\-+()\u200b]/g, '');
+  if (
+    /^[+\d][\d\s\-()]+$/.test(trimmed) &&
+    digitsOnly.length >= 7 &&
+    digitsOnly.length <= 15
+  ) {
+    return 'PHONE';
+  }
+
+  // URL: starts with http(s):// or www.
+  if (/^(https?:\/\/|www\.)/i.test(trimmed)) {
+    return 'URL';
+  }
+
+  // Handle: starts with @ or short pure alphanumeric/underscore
+  if (trimmed.startsWith('@') || /^[a-zA-Z0-9_]{3,15}$/.test(trimmed)) {
+    return 'HANDLE';
+  }
+
+  return 'SMS_TEXT';
+};
+
+const getModeIcon = (mode: InputMode, className: string) => {
+  switch (mode) {
+    case 'HANDLE': return <AtSign className={className} />;
+    case 'URL':    return <Link className={className} />;
+    case 'SMS_TEXT': return <MessageSquare className={className} />;
+    case 'PHONE':  return <Phone className={className} />;
+  }
+};
+
+const DETECTED_COLORS: Record<InputMode, string> = {
+  HANDLE: 'text-crypto-accent border-crypto-accent/40 bg-crypto-accent/10',
+  URL:    'text-blue-400 border-blue-400/40 bg-blue-400/10',
+  SMS_TEXT: 'text-purple-400 border-purple-400/40 bg-purple-400/10',
+  PHONE:  'text-green-400 border-green-400/40 bg-green-400/10',
 };
 
 const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language, isSeniorMode = false }) => {
   const t = TRANSLATIONS[language];
   const [input, setInput] = useState('');
-  const [inputMode, setInputMode] = useState<InputMode>('HANDLE');
-  const [activeCategory, setActiveCategory] = useState<'controversial' | 'investigators' | 'influencers'>('controversial');
+  const [image, setImage] = useState<{ dataUrl: string; base64: string; mediaType: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadImageFile = useCallback((file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const originalDataUrl = e.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 1920;
+        let { width, height } = img;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
+          else { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+        let dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        if (dataUrl.length > 5_400_000) dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        const base64 = dataUrl.split(',')[1];
+        setImage({ dataUrl, base64, mediaType: 'image/jpeg' });
+        setInput('');
+      };
+      img.src = originalDataUrl;
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  // Handle paste events (image paste via Ctrl+V)
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) { loadImageFile(file); e.preventDefault(); }
+          break;
+        }
+      }
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [loadImageFile]);
+
+  // Debounced type — only updates 600ms after user stops typing (no badge flicker)
+  const [displayedType, setDisplayedType] = useState<InputMode | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!input.trim()) {
+      setDisplayedType(null);
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      setDisplayedType(detectInputType(input));
+    }, 600);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [input]);
+
+  // For layout decisions (textarea), use long-text heuristic only — no type flicker
+  const isLongText = input.length > 80 || input.includes('\n');
+  const useTextarea = isLongText || (displayedType === 'SMS_TEXT' && input.trim().length > 0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (input.trim()) {
-      onSearch(input.trim(), inputMode);
+    if (image) {
+      onSearch('[screenshot]', 'IMAGE', { base64: image.base64, mediaType: image.mediaType });
+      return;
     }
+    if (!input.trim()) return;
+    // Detect at submit time for accuracy (not the debounced display value)
+    const finalType = detectInputType(input);
+    const value = finalType === 'HANDLE' && input.trim().startsWith('@')
+      ? input.trim().slice(1)
+      : input.trim();
+    onSearch(value, finalType);
   };
 
-  // Get appropriate placeholder
-  const getPlaceholder = () => {
-    const placeholders = isSeniorMode ? t.placeholderSenior : t.placeholder;
-    return placeholders[inputMode];
-  };
+  const placeholder = isSeniorMode ? t.placeholderSenior : t.placeholder;
 
-  // Get mode icon
-  const getModeIcon = (mode: InputMode) => {
-    const iconClass = isSeniorMode ? 'w-6 h-6' : 'w-4 h-4';
-    switch (mode) {
-      case 'HANDLE':
-        return <AtSign className={iconClass} />;
-      case 'URL':
-        return <Link className={iconClass} />;
-      case 'SMS_TEXT':
-        return <MessageSquare className={iconClass} />;
-      case 'PHONE':
-        return <Phone className={iconClass} />;
-    }
-  };
-
-  // Get input prefix display
-  const getInputPrefix = () => {
-    if (inputMode === 'HANDLE') {
-      return <span className="font-mono text-crypto-accent">@</span>;
-    }
-    return getModeIcon(inputMode);
-  };
-
-  // Use tel input type for PHONE mode for better mobile UX
-  const getInputType = () => inputMode === 'PHONE' ? 'tel' : 'text';
+  const submitButton = (extraClass = '') => (
+    <button
+      type="submit"
+      disabled={isLoading || (!input.trim() && !image)}
+      className={`bg-crypto-accent text-crypto-dark font-bold hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+        isSeniorMode ? 'px-8 py-4 rounded-xl text-xl' : 'px-6 py-2 rounded-full'
+      } ${extraClass}`}
+    >
+      {isLoading ? (
+        <>
+          <Loader2 className={`animate-spin ${isSeniorMode ? 'w-7 h-7' : 'w-5 h-5'}`} />
+          <span>{isSeniorMode ? t.scanningSenior : t.scanning}</span>
+        </>
+      ) : (
+        <>
+          <Search className={isSeniorMode ? 'w-7 h-7' : 'w-5 h-5'} />
+          <span>{isSeniorMode ? t.auditSenior : t.audit}</span>
+        </>
+      )}
+    </button>
+  );
 
   return (
     <div className={`w-full mx-auto mb-12 ${isSeniorMode ? 'max-w-3xl' : 'max-w-2xl'}`}>
-      {/* Input Mode Tabs */}
-      <div className={`flex justify-center gap-2 mb-4 ${isSeniorMode ? 'gap-4' : ''}`}>
-        {(['HANDLE', 'URL', 'SMS_TEXT', 'PHONE'] as InputMode[]).map((mode) => (
+      {/* Hidden file input for image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) loadImageFile(f); e.target.value = ''; }}
+      />
+
+      {/* Image preview — shown when an image is loaded */}
+      {image && (
+        <div className="relative mb-3 rounded-2xl overflow-hidden border border-crypto-accent/40 bg-gray-900">
+          <img src={image.dataUrl} alt="screenshot preview" className="w-full max-h-64 object-contain" />
           <button
-            key={mode}
-            onClick={() => {
-              setInputMode(mode);
-              setInput('');
-            }}
-            className={`flex items-center gap-2 rounded-lg font-medium transition-all ${
-              isSeniorMode
-                ? 'px-6 py-4 text-lg'
-                : 'px-4 py-2 text-sm'
-            } ${
-              inputMode === mode
-                ? 'bg-crypto-accent text-crypto-dark'
-                : 'bg-gray-800 text-gray-400 hover:text-gray-300 hover:bg-gray-700'
-            }`}
+            type="button"
+            onClick={() => setImage(null)}
+            className="absolute top-2 right-2 bg-gray-900/80 hover:bg-gray-800 text-gray-300 hover:text-white rounded-full p-1 transition-colors"
           >
-            {getModeIcon(mode)}
-            <span>{isSeniorMode ? t.inputModesSenior[mode] : t.inputModes[mode]}</span>
+            <X className="w-4 h-4" />
           </button>
-        ))}
-      </div>
+          <p className="text-center text-xs text-crypto-accent py-2">{t.imageReady}</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="relative group">
-        <div className="absolute inset-0 bg-crypto-accent opacity-20 blur-xl group-hover:opacity-30 transition-opacity rounded-full"></div>
+        <div className="absolute inset-0 bg-crypto-accent opacity-20 blur-xl group-hover:opacity-30 transition-opacity rounded-full pointer-events-none"></div>
 
-        {/* Text input for HANDLE, URL, and PHONE modes */}
-        {inputMode !== 'SMS_TEXT' ? (
-          <div className={`relative flex items-center bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden focus-within:border-crypto-accent transition-colors ${
-            isSeniorMode ? 'rounded-2xl' : 'rounded-full'
-          }`}>
-            <div className={`text-gray-400 ${isSeniorMode ? 'pl-8' : 'pl-6'}`}>
-              {getInputPrefix()}
-            </div>
-            <input
-              type={getInputType()}
-              className={`w-full bg-transparent text-white placeholder-gray-500 focus:outline-none font-sans ${
-                isSeniorMode ? 'px-4 py-6 text-2xl' : 'px-2 py-4 text-lg'
-              }`}
-              placeholder={getPlaceholder()}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={isLoading}
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              className={`bg-crypto-accent text-crypto-dark font-bold hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
-                isSeniorMode ? 'mr-3 px-8 py-4 rounded-xl text-xl' : 'mr-2 px-6 py-2 rounded-full'
-              }`}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className={`animate-spin ${isSeniorMode ? 'w-7 h-7' : 'w-5 h-5'}`} />
-                  <span>{isSeniorMode ? t.scanningSenior : t.scanning}</span>
-                </>
-              ) : (
-                <>
-                  <Search className={isSeniorMode ? 'w-7 h-7' : 'w-5 h-5'} />
-                  <span>{isSeniorMode ? t.auditSenior : t.audit}</span>
-                </>
-              )}
-            </button>
-          </div>
-        ) : (
-          /* Textarea for SMS_TEXT mode */
-          <div className={`relative bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden focus-within:border-crypto-accent transition-colors ${
-            isSeniorMode ? 'rounded-2xl' : 'rounded-2xl'
-          }`}>
+        {useTextarea ? (
+          <div className={`relative bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden focus-within:border-crypto-accent transition-colors rounded-2xl`}>
             <textarea
               className={`w-full bg-transparent text-white placeholder-gray-500 focus:outline-none font-sans resize-none ${
                 isSeniorMode ? 'p-6 text-xl min-h-[200px]' : 'p-4 text-lg min-h-[120px]'
               }`}
-              placeholder={getPlaceholder()}
+              placeholder={placeholder}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={isLoading}
             />
             <div className={`flex justify-end border-t border-gray-800 ${isSeniorMode ? 'p-4' : 'p-3'}`}>
-              <button
-                type="submit"
-                disabled={isLoading || !input.trim()}
-                className={`bg-crypto-accent text-crypto-dark font-bold hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
-                  isSeniorMode ? 'px-8 py-4 rounded-xl text-xl' : 'px-6 py-2 rounded-full'
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className={`animate-spin ${isSeniorMode ? 'w-7 h-7' : 'w-5 h-5'}`} />
-                    <span>{isSeniorMode ? t.scanningSenior : t.scanning}</span>
-                  </>
-                ) : (
-                  <>
-                    <Search className={isSeniorMode ? 'w-7 h-7' : 'w-5 h-5'} />
-                    <span>{isSeniorMode ? t.auditSenior : t.audit}</span>
-                  </>
-                )}
-              </button>
+              {submitButton()}
             </div>
+          </div>
+        ) : (
+          <div className={`relative flex items-center bg-gray-900 border border-gray-700 shadow-2xl overflow-hidden focus-within:border-crypto-accent transition-colors ${
+            isSeniorMode ? 'rounded-2xl' : 'rounded-full'
+          }`}>
+            <div className={`text-gray-400 ${isSeniorMode ? 'pl-8' : 'pl-6'}`}>
+              {input.trim() && displayedType
+                ? getModeIcon(displayedType, isSeniorMode ? 'w-6 h-6' : 'w-4 h-4')
+                : <Search className={isSeniorMode ? 'w-6 h-6' : 'w-4 h-4'} />
+              }
+            </div>
+            <input
+              type="text"
+              className={`w-full bg-transparent text-white placeholder-gray-500 focus:outline-none font-sans ${
+                isSeniorMode ? 'px-4 py-6 text-2xl' : 'px-2 py-4 text-lg'
+              }`}
+              placeholder={placeholder}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={isLoading}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+              title={t.uploadImage}
+              className={`text-gray-400 hover:text-crypto-accent transition-colors disabled:opacity-40 flex-shrink-0 ${isSeniorMode ? 'pr-3' : 'pr-2'}`}
+            >
+              <ImagePlus className={isSeniorMode ? 'w-6 h-6' : 'w-5 h-5'} />
+            </button>
+            {submitButton(isSeniorMode ? 'mr-3' : 'mr-2')}
           </div>
         )}
       </form>
 
-      {/* Category Tabs - Only show for HANDLE mode */}
-      {inputMode === 'HANDLE' && !isSeniorMode && (
-        <>
-          <div className="flex justify-center gap-2 mt-6 mb-4">
-            <button
-              onClick={() => setActiveCategory('controversial')}
-              className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeCategory === 'controversial'
-                  ? 'bg-red-900/30 text-red-400 border border-red-800'
-                  : 'bg-gray-800 text-gray-400 hover:text-gray-300'
-              }`}
-            >
-              <AlertTriangle className="w-4 h-4" />
-              {t.categories.controversial}
-            </button>
-            <button
-              onClick={() => setActiveCategory('investigators')}
-              className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeCategory === 'investigators'
-                  ? 'bg-blue-900/30 text-blue-400 border border-blue-800'
-                  : 'bg-gray-800 text-gray-400 hover:text-gray-300'
-              }`}
-            >
-              <Shield className="w-4 h-4" />
-              {t.categories.investigators}
-            </button>
-            <button
-              onClick={() => setActiveCategory('influencers')}
-              className={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeCategory === 'influencers'
-                  ? 'bg-green-900/30 text-green-400 border border-green-800'
-                  : 'bg-gray-800 text-gray-400 hover:text-gray-300'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              {t.categories.influencers}
-            </button>
-          </div>
+      {/* Paste hint — shown when no image and no input */}
+      {!image && !input.trim() && !isSeniorMode && (
+        <p className="text-center text-xs text-gray-600 mt-2">{t.pasteImage}</p>
+      )}
 
-          {/* Suggested Handles */}
-          <div className="flex flex-wrap justify-center gap-2 mt-4">
-            {SUGGESTED_HANDLES[activeCategory].map(({ handle, noteKey }) => (
+      {/* Detected Type Badge — only shown after debounce (600ms after user stops typing) */}
+      {displayedType && input.trim() && (
+        <div className="flex justify-center mt-3">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-all ${DETECTED_COLORS[displayedType]}`}>
+            {getModeIcon(displayedType, 'w-3 h-3')}
+            {t.detectedLabel} {t.detected[displayedType]}
+          </span>
+        </div>
+      )}
+
+      {/* Scenario Chips — only when input is empty and not senior mode */}
+      {!input.trim() && !isSeniorMode && (
+        <>
+          <p className="text-center text-xs text-gray-500 mt-6 mb-3">{t.scenarioHint}</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {SCENARIO_CHIPS.map(({ id, icon, label, sample }) => (
               <button
-                key={handle}
-                onClick={() => {
-                  setInput(handle);
-                  onSearch(handle, 'HANDLE');
-                }}
-                className="group relative bg-gray-900/50 hover:bg-gray-800 border border-gray-700 hover:border-crypto-accent rounded-lg px-4 py-2 transition-all"
+                key={id}
+                onClick={() => setInput(sample)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800/80 hover:bg-gray-700 border border-gray-700 hover:border-crypto-accent/50 text-sm text-gray-300 hover:text-white transition-all"
                 disabled={isLoading}
               >
-                <div className="flex flex-col items-start">
-                  <span className="text-crypto-accent font-medium">@{handle}</span>
-                  <span className="text-xs text-gray-500 group-hover:text-gray-400">{t.suggestedHandles[noteKey]}</span>
-                </div>
+                <span>{icon}</span>
+                <span>{label[language]}</span>
               </button>
             ))}
           </div>
         </>
       )}
 
-      {/* Senior Mode - Simple Instructions */}
-      {isSeniorMode && (
+      {/* Senior Mode hint */}
+      {isSeniorMode && !input.trim() && (
         <div className="mt-6 text-center">
           <p className="text-xl text-gray-300">
             {language === 'zh-TW'

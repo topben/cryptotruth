@@ -12,17 +12,17 @@ import { ShieldAlert, Activity, Search, Share2, Globe, CheckCircle2, AlertTriang
 // UI Text dictionary for all static text
 const UI_TEXT = {
   en: {
-    appName: 'TruthGuard',
-    appNameHighlight: 'AI',
-    poweredBy: 'Powered by Google Gemini',
+    appName: 'VerifyFirst',
+    appNameHighlight: ' AI',
+    poweredBy: 'Powered by AWS, Gogolook & Claude',
     seniorMode: 'Senior Mode',
     seniorModeOn: 'Easy Mode ON',
     seniorModeOff: 'Easy Mode OFF',
     hero: {
-      title: 'Verify Before You',
-      titleHighlight: 'Trust',
-      subtitle: 'Crypto · Truth · News',
-      description: 'AI-powered scam detection. Check suspicious messages, links, and accounts instantly.',
+      title: 'Verify First,',
+      titleHighlight: 'Trust Later',
+      subtitle: 'AI Scam Detection · Risk Analysis · Safety Guide',
+      description: 'Paste a message, link, handle, or phone number. AI breaks down scam patterns and tells you the risks, reasons, and next steps.',
       descriptionSenior: 'Got a suspicious message? Paste it here and we\'ll tell you if it\'s safe!'
     },
     loading: {
@@ -80,17 +80,17 @@ const UI_TEXT = {
     }
   },
   'zh-TW': {
-    appName: 'TruthGuard',
-    appNameHighlight: 'AI',
-    poweredBy: '由 Google Gemini 提供技術支援',
+    appName: 'VerifyFirst',
+    appNameHighlight: ' AI',
+    poweredBy: '由 AWS、Gogolook 與 Claude 提供支援',
     seniorMode: '長輩模式',
     seniorModeOn: '簡易模式 開啟',
     seniorModeOff: '簡易模式 關閉',
     hero: {
-      title: '信任前，先',
-      titleHighlight: '驗證',
-      subtitle: '加密 · 真相 · 新聞',
-      description: 'AI 驅動的防詐偵測。即時檢查可疑訊息、連結和帳號。',
+      title: '先驗證，',
+      titleHighlight: '再相信',
+      subtitle: 'AI 詐騙偵測 · 風險分析 · 防詐指南',
+      description: '貼上訊息、網址、帳號、電話或截圖，AI 幫你拆解詐騙劇本，告訴你風險、原因與下一步行動。',
       descriptionSenior: '收到可疑訊息？貼上來讓我們幫您檢查是否安全！'
     },
     loading: {
@@ -181,7 +181,7 @@ const App: React.FC = () => {
     setIsSeniorMode(prev => !prev);
   };
 
-  const handleSearch = async (input: string, inputType?: InputType, forceRefresh: boolean = false) => {
+  const handleSearch = async (input: string, inputType?: InputType, imageData?: { base64: string; mediaType: string }) => {
     setError(null);
     setAnalysis(null);
     setLoadingState('SEARCHING');
@@ -194,7 +194,10 @@ const App: React.FC = () => {
 
     try {
       // Use the new TruthGuard analysis function
-      const result = await analyzeTruthGuard(input, inputType, language, forceRefresh);
+      // IMAGE type falls back to SMS_TEXT since backend uses Gemini (no image support via this path)
+      const effectiveInput = inputType === 'IMAGE' ? (input || '[screenshot]') : input;
+      const effectiveType = inputType === 'IMAGE' ? 'SMS_TEXT' : inputType;
+      const result = await analyzeTruthGuard(effectiveInput, effectiveType, language, false);
 
       setAnalysis(result);
       setLoadingState('COMPLETED');
@@ -304,10 +307,8 @@ const App: React.FC = () => {
                 <h1 className={`font-display font-bold text-white mb-4 ${seniorModeStyles.heading}`}>
                     {t.hero.title} <span className="text-transparent bg-clip-text bg-gradient-to-r from-crypto-accent to-blue-500">{t.hero.titleHighlight}</span>
                 </h1>
-                <p className={`text-crypto-accent font-display tracking-widest uppercase mb-3 ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>
-                    {t.hero.subtitle}
-                </p>
-                <p className={`text-gray-400 max-w-2xl mx-auto ${seniorModeStyles.text}`}>
+
+                <p className={`text-gray-400 whitespace-nowrap mx-auto ${seniorModeStyles.text}`}>
                     {isSeniorMode ? t.hero.descriptionSenior : t.hero.description}
                 </p>
             </div>
@@ -417,6 +418,7 @@ const App: React.FC = () => {
                             <h2 className={`font-bold text-white mb-1 ${isSeniorMode ? 'text-3xl' : 'text-2xl'}`}>
                               {analysis.inputType === 'HANDLE' ? `@${analysis.handle}` :
                                analysis.inputType === 'URL' ? '🔗 URL' :
+                               analysis.inputType === 'IMAGE' ? '🖼️ ' + (language === 'zh-TW' ? '截圖分析' : 'Screenshot') :
                                '💬 ' + (language === 'zh-TW' ? '訊息' : 'Message')}
                             </h2>
                             <p className={`text-crypto-muted font-mono mb-4 ${isSeniorMode ? 'text-base' : 'text-sm'}`}>
