@@ -431,7 +431,7 @@ const App: React.FC = () => {
                     {t.hero.title} <span className="text-transparent bg-clip-text bg-gradient-to-r from-crypto-accent to-blue-500">{t.hero.titleHighlight}</span>
                 </h1>
 
-                <p className={`text-gray-400 whitespace-nowrap mx-auto ${seniorModeStyles.text}`}>
+                <p className={`text-gray-400 mx-auto max-w-xl ${seniorModeStyles.text}`}>
                     {isSeniorMode ? t.hero.descriptionSenior : t.hero.description}
                 </p>
             </div>
