@@ -492,15 +492,49 @@ async function dnsFacts(hostname: string): Promise<{ resolvable: boolean; ips: s
   }
 }
 
+// --- ScamSniffer: Web3/crypto phishing blacklist ---
+async function scamSnifferCheck(url: string): Promise<{ status: 'BLOCKED' | 'PASSED' | 'SKIP' }> {
+  const key = process.env.SCAMSNIFFER_API_KEY;
+  if (!key) return { status: 'SKIP' };
+  try {
+    const res = await fetchWithTimeout(
+      `https://lookup-api.scamsniffer.io/site/check?url=${encodeURIComponent(url)}`,
+      { headers: { 'x-api-key': key } }
+    );
+    if (!res.ok) return { status: 'SKIP' };
+    const d = await res.json();
+    return { status: d.status === 'BLOCKED' ? 'BLOCKED' : 'PASSED' };
+  } catch {
+    return { status: 'SKIP' };
+  }
+}
+
+async function scamSnifferAddressCheck(address: string): Promise<{ status: 'BLOCKED' | 'PASSED' | 'SKIP' }> {
+  const key = process.env.SCAMSNIFFER_API_KEY;
+  if (!key) return { status: 'SKIP' };
+  try {
+    const res = await fetchWithTimeout(
+      `https://lookup-api.scamsniffer.io/address/check?address=${encodeURIComponent(address)}`,
+      { headers: { 'x-api-key': key } }
+    );
+    if (!res.ok) return { status: 'SKIP' };
+    const d = await res.json();
+    return { status: d.status === 'BLOCKED' ? 'BLOCKED' : 'PASSED' };
+  } catch {
+    return { status: 'SKIP' };
+  }
+}
+
 // --- Gather all URL facts and format as prompt section ---
 async function buildURLFactsSection(url: string): Promise<string> {
   let hostname: string;
   try { hostname = new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 
-  const [rdap, sb, dns] = await Promise.allSettled([
+  const [rdap, sb, dns, ss] = await Promise.allSettled([
     rdapFacts(hostname),
     safeBrowsingCheck(url),
     dnsFacts(hostname),
+    scamSnifferCheck(url),
   ]);
 
   const lines: string[] = ['=== OBJECTIVE PRE-CHECKS (treat as verified ground truth) ==='];
@@ -534,6 +568,14 @@ async function buildURLFactsSection(url: string): Promise<string> {
       lines.push(`DNS: Resolves → ${d.ips.join(', ')}`);
     } else {
       lines.push('DNS: ❌ Does not resolve — domain may not be active');
+    }
+  }
+
+  if (ss.status === 'fulfilled' && ss.value.status !== 'SKIP') {
+    if (ss.value.status === 'BLOCKED') {
+      lines.push('ScamSniffer: 🚨 BLOCKED — confirmed crypto/Web3 phishing domain');
+    } else {
+      lines.push('ScamSniffer: ✅ Not on crypto phishing blacklist');
     }
   }
 
@@ -584,22 +626,29 @@ function buildPhoneFactsSection(e164: string): string {
   ].join('\n');
 }
 
-// --- SMS: extract embedded URLs/phones and check them ---
+// --- SMS: extract embedded URLs/wallets/phones and check them ---
 async function buildSMSFactsSection(text: string): Promise<string> {
   const urlMatches = [...text.matchAll(/https?:\/\/[^\s<>"{}|\\^`[\]]+/gi)].map(m => m[0]);
   const uniqueURLs = [...new Set(urlMatches)].slice(0, 3);
   const phoneMatches = [...text.matchAll(/(?:\+886|886|0)[89]\d{8}|\+\d{8,14}/g)].map(m => m[0]);
   const uniquePhones = [...new Set(phoneMatches)].slice(0, 2);
+  // Ethereum/EVM wallet addresses
+  const walletMatches = [...text.matchAll(/0x[a-fA-F0-9]{40}/g)].map(m => m[0]);
+  const uniqueWallets = [...new Set(walletMatches)].slice(0, 3);
 
-  if (uniqueURLs.length === 0 && uniquePhones.length === 0) return '';
+  if (uniqueURLs.length === 0 && uniquePhones.length === 0 && uniqueWallets.length === 0) return '';
 
-  const lines: string[] = ['=== EMBEDDED LINKS/PHONES PRE-CHECKS ==='];
+  const lines: string[] = ['=== EMBEDDED LINKS/WALLETS/PHONES PRE-CHECKS ==='];
 
   for (const url of uniqueURLs) {
     let hostname: string;
     try { hostname = new URL(url).hostname.replace(/^www\./, ''); } catch { continue; }
 
-    const [rdap, sb] = await Promise.allSettled([rdapFacts(hostname), safeBrowsingCheck(url)]);
+    const [rdap, sb, ss] = await Promise.allSettled([
+      rdapFacts(hostname),
+      safeBrowsingCheck(url),
+      scamSnifferCheck(url),
+    ]);
     lines.push(`\nURL: ${url}`);
     const rd = rdap.status === 'fulfilled' ? rdap.value : {};
     if (rd.domainAgeDays !== undefined) {
@@ -608,6 +657,17 @@ async function buildSMSFactsSection(text: string): Promise<string> {
     }
     if (sb.status === 'fulfilled' && sb.value.status !== 'SKIP') {
       lines.push(`  Safe Browsing: ${sb.value.status === 'THREAT' ? '🚨 THREAT — ' + sb.value.threats?.join(', ') : '✅ CLEAN'}`);
+    }
+    if (ss.status === 'fulfilled' && ss.value.status !== 'SKIP') {
+      lines.push(`  ScamSniffer: ${ss.value.status === 'BLOCKED' ? '🚨 BLOCKED — confirmed crypto phishing domain' : '✅ Not on crypto phishing blacklist'}`);
+    }
+  }
+
+  for (const wallet of uniqueWallets) {
+    const result = await scamSnifferAddressCheck(wallet);
+    lines.push(`\nWallet Address: ${wallet}`);
+    if (result.status !== 'SKIP') {
+      lines.push(`  ScamSniffer: ${result.status === 'BLOCKED' ? '🚨 BLOCKED — confirmed scam wallet address' : '✅ Not on scam wallet blacklist'}`);
     }
   }
 
@@ -819,7 +879,8 @@ SCORING:
 - trustScore: 0(Dangerous)-100(Safe). <20: Confirmed Scam Site. 20-40: High Risk. 40-60: Suspicious/Unverified. 60-80: Probably Safe. >80: Established & Trusted.
 - scamProbability: Only elevate above 40 if concrete negative evidence exists. A well-known domain with no reports = scamProbability 0-15.
 - If PRE-CHECKS above show "Google Safe Browsing: ✅ CLEAN" and domain age > 365 days, scamProbability MUST be ≤ 20 unless search reveals specific reports.
-- If PRE-CHECKS show "🚨 THREAT", scamProbability MUST be ≥ 85.
+- If PRE-CHECKS show Google Safe Browsing "🚨 THREAT", scamProbability MUST be ≥ 85.
+- If PRE-CHECKS show ScamSniffer "🚨 BLOCKED", scamProbability MUST be ≥ 90 — this is a confirmed crypto phishing domain.
 
 OUTPUT JSON ONLY:
 {
