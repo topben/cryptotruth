@@ -1,12 +1,13 @@
 {
-  "name": "CryptoTruth - Crypto KOL Analyzer",
-  "short_name": "CryptoTruth",
-  "description": "AI-powered crypto KOL analyzer that verifies crypto Twitter influencers by analyzing their track records, historical calls, and potential scams.",
+  "name": "先查再說 - AI 詐騙辨識工具",
+  "short_name": "verify1st",
+  "description": "免費 AI 詐騙辨識，查詢可疑訊息、釣魚連結、詐騙電話號碼，即時判斷詐騙風險。",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B0C10",
   "theme_color": "#66FCF1",
   "orientation": "portrait-primary",
+  "lang": "zh-TW",
   "icons": [
     {
       "src": "/favicon-16x16.png",
@@ -36,7 +37,7 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["finance", "utilities", "productivity"],
+  "categories": ["finance", "utilities", "productivity", "security"],
   "screenshots": [
     {
       "src": "/screenshot.png",

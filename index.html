@@ -1,21 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Primary Meta Tags -->
-    <title>Verify1st - AI-Powered Scam Detection | verify1st.tw</title>
-    <meta name="title" content="Verify1st - AI-Powered Scam Detection | verify1st.tw" />
-    <meta name="description" content="AI-powered scam detection to verify suspicious messages, links, and accounts instantly. Stay safe from crypto and online scams." />
-    <meta name="keywords" content="crypto truth, crypto news, crypto scam checker, AI scam detection, crypto verification, fraud detection, cryptocurrency safety, anti-fraud, blockchain security, crypto due diligence" />
+    <title>先查再說 - AI 詐騙辨識工具 | verify1st.tw</title>
+    <meta name="title" content="先查再說 - AI 詐騙辨識工具 | verify1st.tw" />
+    <meta name="description" content="免費 AI 詐騙辨識，查詢可疑訊息、釣魚連結、詐騙電話號碼。整合 VirusTotal、Google 安全瀏覽、加密貨幣黑名單，即時判斷詐騙風險。台灣首選防詐騙工具。" />
+    <meta name="keywords" content="詐騙查詢,防詐騙,詐騙辨識,釣魚網站檢測,可疑訊息查詢,詐騙電話查詢,加密貨幣詐騙,投資詐騙,詐騙網站,AI防詐騙,網路詐騙,詐騙偵測,165反詐騙,可疑連結檢查,假投資,假交友詐騙,一鍵詐騙,verify1st,scam detection,phishing check,crypto scam checker" />
     <meta name="author" content="tokimi.space" />
     <meta name="robots" content="index, follow" />
-    <meta name="language" content="English" />
+    <meta name="language" content="zh-TW" />
     <meta name="revisit-after" content="7 days" />
 
-    <!-- Canonical URL -->
+    <!-- Taiwan / Asia Geo Targeting -->
+    <meta name="geo.region" content="TW" />
+    <meta name="geo.placename" content="Taiwan" />
+    <meta name="DC.language" content="zh-TW" />
+
+    <!-- Canonical & hreflang -->
     <link rel="canonical" href="https://verify1st.tw/" />
+    <link rel="alternate" hreflang="zh-TW" href="https://verify1st.tw/" />
+    <link rel="alternate" hreflang="vi" href="https://verify1st.tw/" />
+    <link rel="alternate" hreflang="en" href="https://verify1st.tw/" />
+    <link rel="alternate" hreflang="x-default" href="https://verify1st.tw/" />
 
     <!-- Theme Color -->
     <meta name="theme-color" content="#66FCF1" />
@@ -24,19 +33,21 @@
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://verify1st.tw/" />
-    <meta property="og:title" content="Verify1st - AI-Powered Scam Detection | verify1st.tw" />
-    <meta property="og:description" content="Your trusted source for crypto truth and news. AI-powered scam detection to verify suspicious messages, links, and accounts instantly." />
+    <meta property="og:title" content="先查再說 - AI 詐騙辨識工具 | verify1st.tw" />
+    <meta property="og:description" content="免費 AI 詐騙辨識，查詢可疑訊息、釣魚連結、詐騙電話號碼。整合多重資安資料庫，即時判斷詐騙風險。" />
     <meta property="og:image" content="https://verify1st.tw/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:site_name" content="Verify1st" />
-    <meta property="og:locale" content="en_US" />
+    <meta property="og:image:alt" content="verify1st.tw AI 詐騙辨識工具" />
+    <meta property="og:site_name" content="verify1st.tw" />
+    <meta property="og:locale" content="zh_TW" />
+    <meta property="og:locale:alternate" content="en_US" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://verify1st.tw/" />
-    <meta name="twitter:title" content="Verify1st - AI-Powered Scam Detection | verify1st.tw" />
-    <meta name="twitter:description" content="Your trusted source for crypto truth and news. AI-powered scam detection to verify suspicious messages, links, and accounts instantly." />
+    <meta name="twitter:title" content="先查再說 - AI 詐騙辨識工具 | verify1st.tw" />
+    <meta name="twitter:description" content="免費 AI 詐騙辨識，查詢可疑訊息、釣魚連結、詐騙電話號碼。整合多重資安資料庫，即時判斷詐騙風險。" />
     <meta name="twitter:image" content="https://verify1st.tw/twitter-card.png" />
     <meta name="twitter:creator" content="@tokimi_space" />
     <meta name="twitter:site" content="@tokimi_space" />
@@ -58,15 +69,16 @@
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://cdn.tailwindcss.com" />
 
-    <!-- Structured Data (JSON-LD) -->
+    <!-- Structured Data: WebApplication -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      "name": "Verify1st",
-      "alternateName": "verify1st.tw",
-      "applicationCategory": "FinanceApplication",
-      "description": "Your trusted source for crypto truth and news. AI-powered scam detection to verify suspicious messages, links, and accounts instantly.",
+      "name": "verify1st.tw",
+      "alternateName": ["先查再說", "Verify1st", "AI詐騙辨識工具"],
+      "applicationCategory": "SecurityApplication",
+      "inLanguage": ["zh-TW", "en", "vi"],
+      "description": "免費 AI 詐騙辨識工具，查詢可疑訊息、釣魚連結、詐騙電話號碼。整合 VirusTotal、Google 安全瀏覽、ScamSniffer 等多重資安資料庫，即時判斷詐騙風險。",
       "url": "https://verify1st.tw/",
       "author": {
         "@type": "Organization",
@@ -76,25 +88,74 @@
       "offers": {
         "@type": "Offer",
         "price": "0",
-        "priceCurrency": "USD"
+        "priceCurrency": "TWD"
       },
       "operatingSystem": "Any",
       "browserRequirements": "Requires JavaScript. Requires HTML5.",
       "screenshot": "https://verify1st.tw/screenshot.png",
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.8",
-        "ratingCount": "1247"
-      },
       "featureList": [
-        "AI-powered scam detection",
-        "Suspicious message verification",
-        "Link safety analysis",
-        "Account credibility check",
-        "Real-time crypto fraud detection"
+        "AI 詐騙辨識",
+        "可疑訊息查詢",
+        "釣魚連結檢測",
+        "詐騙電話查詢",
+        "加密貨幣詐騙辨識",
+        "VirusTotal 多引擎掃描",
+        "Google 安全瀏覽整合",
+        "ScamSniffer 加密貨幣黑名單"
       ]
     }
     </script>
+
+    <!-- Structured Data: FAQPage (boosts rich snippets in zh-TW search) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "如何查詢可疑訊息是否為詐騙？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "直接將可疑訊息、網址或電話號碼貼入 verify1st.tw 的查詢框，AI 會自動辨識並整合多個資安資料庫（VirusTotal、Google 安全瀏覽、ScamSniffer）給出詐騙風險評估。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "如何辨識釣魚網站？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "釣魚網站常見特徵：域名拼字相似（如 g00gle.com）、網站剛建立不久、要求輸入帳號密碼或轉帳。可將網址貼入 verify1st.tw 即時查詢域名年齡與安全紀錄。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "投資詐騙有哪些警訊？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "常見警訊包括：保證獲利、老師帶單、穩賺不賠、限時優惠、要求加 LINE 或 Telegram 私訊、索取轉帳或加密貨幣。若收到類似訊息，請先透過 verify1st.tw 查詢，或撥打 165 反詐騙專線。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "收到可疑電話怎麼辦？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "先將電話號碼貼入 verify1st.tw 查詢是否有詐騙紀錄。若判斷為高風險，請立即掛斷並撥打 165 反詐騙諮詢專線回報。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "verify1st.tw 是免費的嗎？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "是的，verify1st.tw 完全免費使用，不需要註冊帳號。支援查詢網址、電話號碼、可疑訊息全文及加密貨幣帳號。"
+          }
+        }
+      ]
+    }
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <script>
@@ -130,14 +191,14 @@
         width: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #1F2833; 
+        background: #1F2833;
       }
       ::-webkit-scrollbar-thumb {
-        background: #45A29E; 
+        background: #45A29E;
         border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #66FCF1; 
+        background: #66FCF1;
       }
     </style>
   <script type="importmap">
