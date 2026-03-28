@@ -400,6 +400,227 @@ const setCachedAnalysis = async (handle: string, language: string, data: any) =>
 };
 
 
+// =============================================================================
+// FACT GATHERING — free external checks run before AI analysis
+// =============================================================================
+
+const FACT_FETCH_TIMEOUT_MS = 5000;
+
+async function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), FACT_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+// --- RDAP: domain registration info (no API key required) ---
+async function rdapFacts(hostname: string): Promise<Record<string, string>> {
+  try {
+    const res = await fetchWithTimeout(`https://rdap.org/domain/${encodeURIComponent(hostname)}`);
+    if (!res.ok) return {};
+    const d = await res.json();
+
+    const events: any[] = d.events || [];
+    const regEvent = events.find((e: any) => e.eventAction === 'registration');
+    const expEvent = events.find((e: any) => e.eventAction === 'expiration');
+
+    const regDate = regEvent?.eventDate ? new Date(regEvent.eventDate) : null;
+    const ageDays = regDate ? Math.floor((Date.now() - regDate.getTime()) / 86400000) : null;
+
+    const entities: any[] = d.entities || [];
+    const registrar = entities.find((e: any) => (e.roles || []).includes('registrar'));
+    const registrarName = registrar?.vcardArray?.[1]?.find((v: any) => v[0] === 'fn')?.[3] ?? null;
+
+    const result: Record<string, string> = {};
+    if (regDate) result.registrationDate = regDate.toISOString().split('T')[0];
+    if (ageDays !== null) result.domainAgeDays = String(ageDays);
+    if (expEvent?.eventDate) result.expiresDate = new Date(expEvent.eventDate).toISOString().split('T')[0];
+    if (registrarName) result.registrar = String(registrarName);
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+// --- Google Safe Browsing v4 (optional — needs GOOGLE_SAFE_BROWSING_KEY) ---
+async function safeBrowsingCheck(url: string): Promise<{ status: 'CLEAN' | 'THREAT' | 'SKIP'; threats?: string[] }> {
+  const sbKey = process.env.GOOGLE_SAFE_BROWSING_KEY;
+  if (!sbKey) return { status: 'SKIP' };
+  try {
+    const body = {
+      client: { clientId: 'verify1st', clientVersion: '1.0' },
+      threatInfo: {
+        threatTypes: ['MALWARE', 'SOCIAL_ENGINEERING', 'UNWANTED_SOFTWARE'],
+        platformTypes: ['ANY_PLATFORM'],
+        threatEntryTypes: ['URL'],
+        threatEntries: [{ url }],
+      },
+    };
+    const res = await fetchWithTimeout(
+      `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${sbKey}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    );
+    if (!res.ok) return { status: 'SKIP' };
+    const d = await res.json();
+    if (d.matches?.length > 0) {
+      return { status: 'THREAT', threats: d.matches.map((m: any) => m.threatType as string) };
+    }
+    return { status: 'CLEAN' };
+  } catch {
+    return { status: 'SKIP' };
+  }
+}
+
+// --- DNS via Google DoH (no API key required) ---
+async function dnsFacts(hostname: string): Promise<{ resolvable: boolean; ips: string[] }> {
+  try {
+    const res = await fetchWithTimeout(
+      `https://dns.google/resolve?name=${encodeURIComponent(hostname)}&type=A`
+    );
+    if (!res.ok) return { resolvable: false, ips: [] };
+    const d = await res.json();
+    const ips: string[] = (d.Answer || [])
+      .filter((a: any) => a.type === 1)
+      .map((a: any) => a.data as string)
+      .slice(0, 3);
+    return { resolvable: ips.length > 0, ips };
+  } catch {
+    return { resolvable: false, ips: [] };
+  }
+}
+
+// --- Gather all URL facts and format as prompt section ---
+async function buildURLFactsSection(url: string): Promise<string> {
+  let hostname: string;
+  try { hostname = new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
+
+  const [rdap, sb, dns] = await Promise.allSettled([
+    rdapFacts(hostname),
+    safeBrowsingCheck(url),
+    dnsFacts(hostname),
+  ]);
+
+  const lines: string[] = ['=== OBJECTIVE PRE-CHECKS (treat as verified ground truth) ==='];
+  lines.push(`Domain: ${hostname}`);
+
+  const rd = rdap.status === 'fulfilled' ? rdap.value : {};
+  if (rd.domainAgeDays !== undefined) {
+    const days = parseInt(rd.domainAgeDays);
+    const flag = days < 14 ? ' ⚠️ EXTREMELY NEW — high risk signal'
+      : days < 90 ? ' ⚠️ VERY NEW'
+      : days < 365 ? ' (less than 1 year old)'
+      : ' (established domain)';
+    lines.push(`Domain Age: ${days} day(s)${flag}`);
+  }
+  if (rd.registrationDate) lines.push(`Registered: ${rd.registrationDate}`);
+  if (rd.expiresDate) lines.push(`Expires: ${rd.expiresDate}`);
+  if (rd.registrar) lines.push(`Registrar: ${rd.registrar}`);
+
+  if (sb.status === 'fulfilled') {
+    const s = sb.value;
+    if (s.status === 'THREAT') {
+      lines.push(`Google Safe Browsing: 🚨 THREAT DETECTED — ${s.threats?.join(', ')}`);
+    } else if (s.status === 'CLEAN') {
+      lines.push('Google Safe Browsing: ✅ CLEAN (not on any blocklist)');
+    }
+  }
+
+  if (dns.status === 'fulfilled') {
+    const d = dns.value;
+    if (d.resolvable) {
+      lines.push(`DNS: Resolves → ${d.ips.join(', ')}`);
+    } else {
+      lines.push('DNS: ❌ Does not resolve — domain may not be active');
+    }
+  }
+
+  lines.push('=== END PRE-CHECKS — use the above as authoritative data ===');
+  return lines.join('\n');
+}
+
+// --- Phone facts: local parsing, no API key required ---
+const COUNTRY_CODE_MAP: Record<string, string> = {
+  '886': 'Taiwan', '852': 'Hong Kong', '853': 'Macau', '855': 'Cambodia',
+  '856': 'Laos', '880': 'Bangladesh', '65': 'Singapore', '66': 'Thailand',
+  '84': 'Vietnam', '62': 'Indonesia', '63': 'Philippines', '60': 'Malaysia',
+  '81': 'Japan', '82': 'South Korea', '86': 'China', '91': 'India',
+  '1': 'US/Canada', '44': 'UK', '49': 'Germany', '33': 'France',
+  '55': 'Brazil', '7': 'Russia',
+};
+
+function buildPhoneFactsSection(e164: string): string {
+  const digits = e164.startsWith('+') ? e164.slice(1) : e164;
+  let country = 'Unknown';
+  for (const len of [3, 2, 1]) {
+    const cc = digits.slice(0, len);
+    if (COUNTRY_CODE_MAP[cc]) { country = COUNTRY_CODE_MAP[cc]; break; }
+  }
+
+  let lineType = 'Unknown';
+  if (digits.startsWith('886')) {
+    const local = digits.slice(3);
+    if (local.startsWith('9')) lineType = 'Mobile (Taiwan)';
+    else if (local.startsWith('800')) lineType = 'Toll-free (Taiwan)';
+    else if (local.startsWith('2')) lineType = 'Landline — Taipei';
+    else if (local.startsWith('4')) lineType = 'Landline — Central Taiwan';
+    else if (local.startsWith('6')) lineType = 'Landline — Southern Taiwan';
+    else if (local.startsWith('7')) lineType = 'Landline — Kaohsiung';
+    else lineType = 'Landline (Taiwan)';
+  } else if (digits.startsWith('1')) {
+    lineType = 'North American number (mobile or landline)';
+  } else if (digits.startsWith('86')) {
+    lineType = digits.startsWith('861') || digits.startsWith('869') ? 'Mobile (China)' : 'Landline (China)';
+  }
+
+  return [
+    '=== OBJECTIVE PRE-CHECKS (verified data) ===',
+    `Number (E.164): ${e164}`,
+    `Country: ${country}`,
+    `Line Type: ${lineType}`,
+    '=== END PRE-CHECKS ===',
+  ].join('\n');
+}
+
+// --- SMS: extract embedded URLs/phones and check them ---
+async function buildSMSFactsSection(text: string): Promise<string> {
+  const urlMatches = [...text.matchAll(/https?:\/\/[^\s<>"{}|\\^`[\]]+/gi)].map(m => m[0]);
+  const uniqueURLs = [...new Set(urlMatches)].slice(0, 3);
+  const phoneMatches = [...text.matchAll(/(?:\+886|886|0)[89]\d{8}|\+\d{8,14}/g)].map(m => m[0]);
+  const uniquePhones = [...new Set(phoneMatches)].slice(0, 2);
+
+  if (uniqueURLs.length === 0 && uniquePhones.length === 0) return '';
+
+  const lines: string[] = ['=== EMBEDDED LINKS/PHONES PRE-CHECKS ==='];
+
+  for (const url of uniqueURLs) {
+    let hostname: string;
+    try { hostname = new URL(url).hostname.replace(/^www\./, ''); } catch { continue; }
+
+    const [rdap, sb] = await Promise.allSettled([rdapFacts(hostname), safeBrowsingCheck(url)]);
+    lines.push(`\nURL: ${url}`);
+    const rd = rdap.status === 'fulfilled' ? rdap.value : {};
+    if (rd.domainAgeDays !== undefined) {
+      const days = parseInt(rd.domainAgeDays);
+      lines.push(`  Domain Age: ${days} day(s)${days < 30 ? ' ⚠️ VERY NEW' : ''}`);
+    }
+    if (sb.status === 'fulfilled' && sb.value.status !== 'SKIP') {
+      lines.push(`  Safe Browsing: ${sb.value.status === 'THREAT' ? '🚨 THREAT — ' + sb.value.threats?.join(', ') : '✅ CLEAN'}`);
+    }
+  }
+
+  if (uniquePhones.length > 0) {
+    lines.push(`\nPhone numbers found in message: ${uniquePhones.join(', ')}`);
+  }
+
+  lines.push('=== END PRE-CHECKS ===');
+  return lines.join('\n');
+}
+
+// =============================================================================
+
 export default async function handler(req: any, res: any) {
   // Only allow POST
   if (req.method !== 'POST') {
@@ -503,6 +724,16 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // === GATHER OBJECTIVE FACTS (parallel, before AI call) ===
+    let factsSection = '';
+    if (detectedType === 'URL') {
+      factsSection = await buildURLFactsSection(sanitizedInput);
+    } else if (detectedType === 'PHONE') {
+      factsSection = buildPhoneFactsSection(sanitizedInput);
+    } else if (detectedType === 'SMS_TEXT') {
+      factsSection = await buildSMSFactsSection(sanitizedInput);
+    }
+
     // === CALL GEMINI API ===
     const ai = new GoogleGenAI({ apiKey });
 
@@ -582,9 +813,13 @@ CRITICAL RULE FOR RISK SIGNALS:
 - A risk signal must be something specific about this exact domain (blocklist hit, 165 report, confirmed typosquat).
 - If the domain is clearly legitimate and well-established, "rs" MUST be an empty array [].
 
+${factsSection}
+
 SCORING:
 - trustScore: 0(Dangerous)-100(Safe). <20: Confirmed Scam Site. 20-40: High Risk. 40-60: Suspicious/Unverified. 60-80: Probably Safe. >80: Established & Trusted.
 - scamProbability: Only elevate above 40 if concrete negative evidence exists. A well-known domain with no reports = scamProbability 0-15.
+- If PRE-CHECKS above show "Google Safe Browsing: ✅ CLEAN" and domain age > 365 days, scamProbability MUST be ≤ 20 unless search reveals specific reports.
+- If PRE-CHECKS show "🚨 THREAT", scamProbability MUST be ≥ 85.
 
 OUTPUT JSON ONLY:
 {
@@ -619,6 +854,8 @@ PHONE SCAM TYPES — only flag if specifically reported for this number:
 - 假投資/Investment Scam: Confirmed reports of high-return promises
 - 一鍵詐騙/One-click fraud: Confirmed reports of prize/debt/package fraud calls
 - 假交友/Romance Scam: Confirmed reports of building trust then requesting money
+
+${factsSection}
 
 SCORING:
 - trustScore: 0(Confirmed Scam)-100(Legitimate). <20: Confirmed Scam Number. 20-40: High Risk. 40-60: Unverified/Unknown. 60-80: No reports found. >80: Verified Legitimate.
@@ -661,6 +898,8 @@ SPECIFIC SCAM PATTERNS — only flag if the EXACT pattern appears in this messag
 - 假交友/Romance Scam: Unsolicited intimacy combined with financial request
 - 假冒機構/Impersonation: Claims to be a bank/government but uses unofficial contact
 - 中獎詐騙/Prize Scam: Claiming unexpected prize AND requiring fee/personal info to claim
+
+${factsSection}
 
 SCORING:
 - trustScore: 0(Scam)-100(Legitimate). <20: Confirmed Scam. 20-40: High Risk. 40-60: Suspicious. 60-80: Probably Fine. >80: Normal Message.
