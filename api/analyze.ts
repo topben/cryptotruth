@@ -514,31 +514,38 @@ export default async function handler(req: any, res: any) {
 
       // Common scam detection instructions
       const scamDetectionInstructions = `
-SCAM DETECTION CRITERIA (check for these red flags):
-- 保證獲利/Guaranteed returns: Promises of fixed high returns (e.g., "guaranteed 30% monthly")
-- 壓力催促/Pressure tactics: Urgency language (e.g., "limited time", "act now", "last chance")
-- 冒充官方/Impersonation: Fake official accounts, copied logos, similar-looking URLs
-- 不明入金/Suspicious payments: Requests for crypto transfers, gift cards, or wire transfers
-- 假冒名人/Celebrity impersonation: Using famous names to build false trust
-- 龐氏特徵/Ponzi signs: Referral bonuses, multi-level structures
-- 釣魚連結/Phishing: Suspicious URLs, URL shorteners, typosquatting domains
+SCAM SIGNAL CRITERIA — only flag if directly evidenced:
+- 保證獲利/Guaranteed returns: Explicit promises of fixed high returns (e.g., "guaranteed 30% monthly")
+- 壓力催促/Pressure tactics: Explicit urgency coercion (e.g., "act NOW or lose forever")
+- 冒充官方/Impersonation: Confirmed fake account mimicking a real entity with evidence
+- 不明入金/Suspicious payments: Explicit requests for crypto/gift-card payments
+- 假冒名人/Celebrity impersonation: Confirmed use of a celebrity's identity fraudulently
+- 龐氏特徵/Ponzi signs: Explicit referral-bonus or pyramid recruitment language
+- 釣魚連結/Phishing: Domain confirmed on blocklist or is a clear typosquat
+
+IMPORTANT — CALIBRATION RULES:
+- Absence of information is NOT a risk signal. Default to LOW risk if nothing suspicious is found.
+- Only add an entry to "rs" if you have direct, specific evidence — not general warnings.
+- A normal business, legitimate influencer, or ordinary message should score scamProbability 0-25.
+- Reserve scamProbability 70+ for cases with multiple concrete red flags confirmed by search results.
+- If search results show nothing concerning, set scamProbability ≤ 20 and trustScore ≥ 75.
 `;
 
       if (detectedType === 'HANDLE') {
         return `
-TASK: 執行「防詐識別分析」- Crypto Influencer Background Check
+TASK: Crypto Influencer Background Check — objective research, report what you find.
 ANALYSIS TARGET: Twitter/X Handle "@${sanitizedInput}"
 LANGUAGE: ${langInstruction}
 
 INSTRUCTIONS:
-1. Use Google Search to research this account's history, controversies, and track record.
-2. Search for: "ZachXBT ${sanitizedInput}", "Coffeezilla ${sanitizedInput}", "Reddit r/CryptoCurrency ${sanitizedInput}", "${sanitizedInput} rug pull", "${sanitizedInput} scam", "${sanitizedInput} paid promo", "165 ${sanitizedInput}".
-3. Check if this account has been flagged by Taiwan's 165 anti-fraud hotline or international scam databases.
+1. Use Google Search to research this account's history, reputation, and track record.
+2. Search for: "${sanitizedInput} crypto", "${sanitizedInput} scam", "${sanitizedInput} rug pull", "ZachXBT ${sanitizedInput}", "Coffeezilla ${sanitizedInput}".
+3. If search returns nothing suspicious, treat the account as unverified but not high-risk.
 ${scamDetectionInstructions}
 
 SCORING:
-- trustScore: 0(Scam)-100(Trusted). <20: Confirmed Fraud. 20-40: High Risk. 40-60: Unknown/Caution. >80: Trusted.
-- scamProbability: Inverse of trustScore adjusted for scam signals. High if multiple red flags found.
+- trustScore: 0(Scam)-100(Trusted). <20: Confirmed Fraud. 20-40: High Risk. 40-60: Unverified/Caution. 60-80: Likely Legitimate. >80: Well-established, Trusted.
+- scamProbability: Only elevate above 40 if concrete negative evidence is found. No evidence = 10-30.
 
 OUTPUT JSON ONLY:
 {
@@ -557,27 +564,27 @@ OUTPUT JSON ONLY:
 `;
       } else if (detectedType === 'URL') {
         return `
-TASK: 執行「防詐識別分析」- Suspicious URL Analysis
+TASK: URL Safety Check — objective research, report what you find.
 ANALYSIS TARGET: URL "${sanitizedInput}"
 LANGUAGE: ${langInstruction}
 
 INSTRUCTIONS:
-1. Use Google Search to research this URL/domain.
-2. Search for: "${sanitizedInput} scam", "${sanitizedInput} fraud", "${sanitizedInput} 詐騙", "site:165.npa.gov.tw ${new URL(sanitizedInput).hostname}", "${new URL(sanitizedInput).hostname} phishing".
+1. Use Google Search to research this URL/domain's reputation.
+2. Search for: "${new URL(sanitizedInput).hostname} scam", "${new URL(sanitizedInput).hostname} phishing", "${new URL(sanitizedInput).hostname} 詐騙", "site:165.npa.gov.tw ${new URL(sanitizedInput).hostname}".
 3. Check if this domain is on blocklists, reported as phishing, or associated with scams.
-4. Analyze the URL structure for suspicious patterns (typosquatting, misleading subdomains, etc.)
-5. Check for typosquatting, suspicious URL structures, and domain reputation signals.
+4. Analyze the URL structure for typosquatting or misleading subdomains.
+5. Well-known, established domains (e.g., major banks, exchanges, government sites) should score high trust by default.
 ${scamDetectionInstructions}
 
 CRITICAL RULE FOR RISK SIGNALS:
 - Only add a risk signal ("rs") if there is DIRECT evidence that THIS SPECIFIC URL/domain is dangerous.
-- Do NOT add risk signals for general warnings like "scammers may impersonate this brand" or "phishing emails may mimic this service" — those are generic internet safety tips, not evidence against this URL.
-- A risk signal must be something specific found about this exact domain (e.g., it is on a blocklist, it has been reported as phishing, it has a typosquatted domain name, it was flagged by Taiwan's 165 hotline).
-- If the domain is clearly legitimate and well-established, "rs" should be an empty array [].
+- Do NOT add risk signals for generic warnings like "scammers may impersonate this brand" — those are not evidence against this URL.
+- A risk signal must be something specific about this exact domain (blocklist hit, 165 report, confirmed typosquat).
+- If the domain is clearly legitimate and well-established, "rs" MUST be an empty array [].
 
 SCORING:
-- trustScore: 0(Dangerous)-100(Safe). <20: Confirmed Scam Site. 20-40: High Risk. 40-60: Suspicious. >80: Likely Safe.
-- scamProbability: Based on domain reputation, URL patterns, and search results.
+- trustScore: 0(Dangerous)-100(Safe). <20: Confirmed Scam Site. 20-40: High Risk. 40-60: Suspicious/Unverified. 60-80: Probably Safe. >80: Established & Trusted.
+- scamProbability: Only elevate above 40 if concrete negative evidence exists. A well-known domain with no reports = scamProbability 0-15.
 
 OUTPUT JSON ONLY:
 {
@@ -596,27 +603,26 @@ OUTPUT JSON ONLY:
 `;
       } else if (detectedType === 'PHONE') {
         return `
-TASK: 執行「防詐識別分析」- Phone Number Reputation Check
+TASK: Phone Number Reputation Check — objective research, report what you find.
 ANALYSIS TARGET: Phone Number "${sanitizedInput}"
 LANGUAGE: ${langInstruction}
 
 INSTRUCTIONS:
 1. Use Google Search to research this phone number's reputation.
-2. Search for: "${sanitizedInput} scam", "${sanitizedInput} 詐騙", "${sanitizedInput} 詐欺", "${sanitizedInput} spam", "165 ${sanitizedInput}".
-3. Check if this number has been reported to Taiwan's 165 anti-fraud hotline or international scam databases.
-4. Look up any available reports about this phone number online.
+2. Search for: "${sanitizedInput} 詐騙", "${sanitizedInput} scam", "${sanitizedInput} spam", "165 ${sanitizedInput}", "${sanitizedInput} 評價".
+3. Check if this number has been reported to Taiwan's 165 anti-fraud hotline or crowd-sourced scam databases.
+4. If no reports are found, the number should be treated as unverified but NOT automatically high-risk.
 ${scamDetectionInstructions}
 
-PHONE SCAM TYPES TO CHECK:
-- 假冒機構/Institution Impersonation: Pretending to be police, banks, government agencies, courts
-- 假投資/Investment Scam: Promising high returns via crypto or stock tips
-- 一鍵詐騙/One-click fraud: Unsolicited calls claiming prizes, debts, or package issues
-- 假交友/Romance Scam: Building trust then requesting money
-- 車手詐騙/Money mule recruitment: Asking to transfer money on their behalf
+PHONE SCAM TYPES — only flag if specifically reported for this number:
+- 假冒機構/Institution Impersonation: Confirmed reports of pretending to be police, banks, government
+- 假投資/Investment Scam: Confirmed reports of high-return promises
+- 一鍵詐騙/One-click fraud: Confirmed reports of prize/debt/package fraud calls
+- 假交友/Romance Scam: Confirmed reports of building trust then requesting money
 
 SCORING:
-- trustScore: 0(Confirmed Scam)-100(Legitimate). <20: Confirmed Scam Number. 20-40: High Risk. 40-60: Suspicious/Unknown. >80: Likely Safe.
-- scamProbability: Based on search results and known scam patterns.
+- trustScore: 0(Confirmed Scam)-100(Legitimate). <20: Confirmed Scam Number. 20-40: High Risk. 40-60: Unverified/Unknown. 60-80: No reports found. >80: Verified Legitimate.
+- scamProbability: Only elevate if reports exist. No reports found = scamProbability 10-30, not 50+.
 
 OUTPUT JSON ONLY:
 {
@@ -636,7 +642,7 @@ OUTPUT JSON ONLY:
       } else {
         // SMS_TEXT
         return `
-TASK: 執行「防詐識別分析」- Suspicious Message Analysis
+TASK: Message Safety Check — read carefully, report what is actually present.
 ANALYSIS TARGET: Message Content:
 """
 ${sanitizedInput}
@@ -644,23 +650,21 @@ ${sanitizedInput}
 LANGUAGE: ${langInstruction}
 
 INSTRUCTIONS:
-1. Analyze this message for common scam patterns.
+1. Read the message carefully. Only flag patterns that are ACTUALLY PRESENT in this exact message.
 2. If it contains URLs or phone numbers, research them via Google Search.
-3. Check for language patterns commonly used in Taiwan/Asia scams (investment scams, romance scams, impersonation).
-4. Search for: any phone numbers or URLs in the message, common scam phrases used.
-5. Search for any URLs or phone numbers embedded in the message.
+3. Do NOT flag a message as scam just because the topic involves money, crypto, or investment — context matters.
+4. Normal messages (receipts, OTP codes, appointment reminders, friend chats) should score scamProbability < 20.
 ${scamDetectionInstructions}
 
-SPECIFIC SCAM TYPES TO CHECK:
-- 假投資/Fake Investment: "老師帶單", "穩賺不賠", "內線消息"
-- 假交友/Romance Scam: Sudden intimacy, requests for money/crypto
-- 假網購/Fake Shopping: Too-good-to-be-true prices, suspicious payment methods
-- 假冒機構/Impersonation: Banks, government, delivery companies
-- 中獎詐騙/Prize Scam: "恭喜中獎", requires fees to claim
+SPECIFIC SCAM PATTERNS — only flag if the EXACT pattern appears in this message:
+- 假投資/Fake Investment: Explicit phrases like "老師帶單", "穩賺不賠", "保證獲利", "內線消息" must be present
+- 假交友/Romance Scam: Unsolicited intimacy combined with financial request
+- 假冒機構/Impersonation: Claims to be a bank/government but uses unofficial contact
+- 中獎詐騙/Prize Scam: Claiming unexpected prize AND requiring fee/personal info to claim
 
 SCORING:
-- trustScore: 0(Scam)-100(Legitimate). <20: Confirmed Scam Pattern. 20-40: High Risk. 40-60: Suspicious. >80: Likely OK.
-- scamProbability: Based on message content, Whoscall/ScamAdviser data, and known scam patterns.
+- trustScore: 0(Scam)-100(Legitimate). <20: Confirmed Scam. 20-40: High Risk. 40-60: Suspicious. 60-80: Probably Fine. >80: Normal Message.
+- scamProbability: Must be grounded in what is literally written. Ambiguous or neutral messages = 10-30. Only 70+ if multiple explicit scam signals are present.
 
 OUTPUT JSON ONLY:
 {
