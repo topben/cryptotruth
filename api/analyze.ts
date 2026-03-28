@@ -492,37 +492,65 @@ async function dnsFacts(hostname: string): Promise<{ resolvable: boolean; ips: s
   }
 }
 
-// --- ScamSniffer: Web3/crypto phishing blacklist ---
-async function scamSnifferCheck(url: string): Promise<{ status: 'BLOCKED' | 'PASSED' | 'SKIP' }> {
-  const key = process.env.SCAMSNIFFER_API_KEY;
-  if (!key) return { status: 'SKIP' };
+// --- ScamSniffer: Web3/crypto phishing blacklist (GitHub open-source DB) ---
+// Module-level cache — persists across warm Vercel invocations, re-fetched after 24h.
+let _ssCache: { domains: Set<string>; addresses: Set<string>; fetchedAt: number } | null = null;
+const SS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const SS_DOMAINS_URL = 'https://raw.githubusercontent.com/scamsniffer/scam-database/main/blacklist/domains.json';
+const SS_ADDRESSES_URL = 'https://raw.githubusercontent.com/scamsniffer/scam-database/main/blacklist/address.json';
+
+async function getScamSnifferDB(): Promise<{ domains: Set<string>; addresses: Set<string> } | null> {
+  const now = Date.now();
+  if (_ssCache && (now - _ssCache.fetchedAt) < SS_CACHE_TTL_MS) return _ssCache;
+
   try {
-    const res = await fetchWithTimeout(
-      `https://lookup-api.scamsniffer.io/site/check?url=${encodeURIComponent(url)}`,
-      { headers: { 'x-api-key': key } }
-    );
-    if (!res.ok) return { status: 'SKIP' };
-    const d = await res.json();
-    return { status: d.status === 'BLOCKED' ? 'BLOCKED' : 'PASSED' };
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 10000); // 10s for larger files
+    const [domainsRes, addressesRes] = await Promise.all([
+      fetch(SS_DOMAINS_URL, { signal: controller.signal }),
+      fetch(SS_ADDRESSES_URL, { signal: controller.signal }),
+    ]);
+    clearTimeout(id);
+
+    if (!domainsRes.ok || !addressesRes.ok) return _ssCache;
+
+    const domains: string[] = await domainsRes.json();
+    const addresses: string[] = await addressesRes.json();
+
+    _ssCache = {
+      domains: new Set(domains.map(d => d.toLowerCase())),
+      addresses: new Set(addresses.map(a => a.toLowerCase())),
+      fetchedAt: now,
+    };
+    return _ssCache;
   } catch {
-    return { status: 'SKIP' };
+    return _ssCache; // Return stale cache on fetch failure
   }
 }
 
-async function scamSnifferAddressCheck(address: string): Promise<{ status: 'BLOCKED' | 'PASSED' | 'SKIP' }> {
-  const key = process.env.SCAMSNIFFER_API_KEY;
-  if (!key) return { status: 'SKIP' };
-  try {
-    const res = await fetchWithTimeout(
-      `https://lookup-api.scamsniffer.io/address/check?address=${encodeURIComponent(address)}`,
-      { headers: { 'x-api-key': key } }
-    );
-    if (!res.ok) return { status: 'SKIP' };
-    const d = await res.json();
-    return { status: d.status === 'BLOCKED' ? 'BLOCKED' : 'PASSED' };
-  } catch {
-    return { status: 'SKIP' };
+async function scamSnifferCheck(url: string): Promise<{ status: 'BLOCKED' | 'PASSED' | 'SKIP'; source?: string }> {
+  let hostname: string;
+  try { hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return { status: 'SKIP' }; }
+
+  const db = await getScamSnifferDB();
+  if (!db) return { status: 'SKIP' };
+
+  if (db.domains.has(hostname)) return { status: 'BLOCKED', source: 'exact match' };
+
+  // Also check root domain (catches subdomains of blacklisted domains)
+  const parts = hostname.split('.');
+  if (parts.length > 2) {
+    const root = parts.slice(-2).join('.');
+    if (db.domains.has(root)) return { status: 'BLOCKED', source: 'parent domain match' };
   }
+
+  return { status: 'PASSED' };
+}
+
+async function scamSnifferAddressCheck(address: string): Promise<{ status: 'BLOCKED' | 'PASSED' | 'SKIP' }> {
+  const db = await getScamSnifferDB();
+  if (!db) return { status: 'SKIP' };
+  return { status: db.addresses.has(address.toLowerCase()) ? 'BLOCKED' : 'PASSED' };
 }
 
 // --- Gather all URL facts and format as prompt section ---
