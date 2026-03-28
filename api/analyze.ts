@@ -553,16 +553,69 @@ async function scamSnifferAddressCheck(address: string): Promise<{ status: 'BLOC
   return { status: db.addresses.has(address.toLowerCase()) ? 'BLOCKED' : 'PASSED' };
 }
 
+// --- VirusTotal: multi-engine domain reputation (free 500/day) ---
+interface VTResult {
+  malicious: number;
+  suspicious: number;
+  harmless: number;
+  undetected: number;
+  reputation: number;  // community reputation score, negative = bad
+  categories: string[];
+}
+
+async function virusTotalCheck(hostname: string): Promise<VTResult | null> {
+  const key = process.env.VIRUSTOTAL_API_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetchWithTimeout(
+      `https://www.virustotal.com/api/v3/domains/${encodeURIComponent(hostname)}`,
+      { headers: { 'x-apikey': key } }
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    const attrs = d.data?.attributes ?? {};
+    const stats = attrs.last_analysis_stats ?? {};
+    const cats: string[] = Object.values(attrs.categories ?? {}) as string[];
+    return {
+      malicious: stats.malicious ?? 0,
+      suspicious: stats.suspicious ?? 0,
+      harmless: stats.harmless ?? 0,
+      undetected: stats.undetected ?? 0,
+      reputation: attrs.reputation ?? 0,
+      categories: [...new Set(cats)].slice(0, 5),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function formatVTResult(vt: VTResult): string {
+  const total = vt.malicious + vt.suspicious + vt.harmless + vt.undetected;
+  const engines = total > 0 ? `(${total} engines)` : '';
+
+  if (vt.malicious >= 5) {
+    return `VirusTotal: 🚨 MALICIOUS — ${vt.malicious} engines flagged ${engines}`;
+  } else if (vt.malicious >= 1 || vt.suspicious >= 3) {
+    return `VirusTotal: ⚠️ SUSPICIOUS — ${vt.malicious} malicious, ${vt.suspicious} suspicious ${engines}`;
+  } else if (vt.reputation < -10) {
+    return `VirusTotal: ⚠️ LOW REPUTATION score ${vt.reputation} — community reports negative`;
+  } else {
+    const label = total > 0 ? `✅ CLEAN — 0/${total} engines flagged` : '✅ CLEAN';
+    return `VirusTotal: ${label}${vt.reputation > 0 ? `, reputation +${vt.reputation}` : ''}`;
+  }
+}
+
 // --- Gather all URL facts and format as prompt section ---
 async function buildURLFactsSection(url: string): Promise<string> {
   let hostname: string;
   try { hostname = new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
 
-  const [rdap, sb, dns, ss] = await Promise.allSettled([
+  const [rdap, sb, dns, ss, vt] = await Promise.allSettled([
     rdapFacts(hostname),
     safeBrowsingCheck(url),
     dnsFacts(hostname),
     scamSnifferCheck(url),
+    virusTotalCheck(hostname),
   ]);
 
   const lines: string[] = ['=== OBJECTIVE PRE-CHECKS (treat as verified ground truth) ==='];
@@ -604,6 +657,13 @@ async function buildURLFactsSection(url: string): Promise<string> {
       lines.push('ScamSniffer: 🚨 BLOCKED — confirmed crypto/Web3 phishing domain');
     } else {
       lines.push('ScamSniffer: ✅ Not on crypto phishing blacklist');
+    }
+  }
+
+  if (vt.status === 'fulfilled' && vt.value) {
+    lines.push(formatVTResult(vt.value));
+    if (vt.value.categories.length > 0) {
+      lines.push(`VirusTotal Categories: ${vt.value.categories.join(', ')}`);
     }
   }
 
@@ -672,10 +732,11 @@ async function buildSMSFactsSection(text: string): Promise<string> {
     let hostname: string;
     try { hostname = new URL(url).hostname.replace(/^www\./, ''); } catch { continue; }
 
-    const [rdap, sb, ss] = await Promise.allSettled([
+    const [rdap, sb, ss, vt] = await Promise.allSettled([
       rdapFacts(hostname),
       safeBrowsingCheck(url),
       scamSnifferCheck(url),
+      virusTotalCheck(hostname),
     ]);
     lines.push(`\nURL: ${url}`);
     const rd = rdap.status === 'fulfilled' ? rdap.value : {};
@@ -688,6 +749,9 @@ async function buildSMSFactsSection(text: string): Promise<string> {
     }
     if (ss.status === 'fulfilled' && ss.value.status !== 'SKIP') {
       lines.push(`  ScamSniffer: ${ss.value.status === 'BLOCKED' ? '🚨 BLOCKED — confirmed crypto phishing domain' : '✅ Not on crypto phishing blacklist'}`);
+    }
+    if (vt.status === 'fulfilled' && vt.value) {
+      lines.push(`  ${formatVTResult(vt.value)}`);
     }
   }
 
@@ -909,6 +973,9 @@ SCORING:
 - If PRE-CHECKS above show "Google Safe Browsing: ✅ CLEAN" and domain age > 365 days, scamProbability MUST be ≤ 20 unless search reveals specific reports.
 - If PRE-CHECKS show Google Safe Browsing "🚨 THREAT", scamProbability MUST be ≥ 85.
 - If PRE-CHECKS show ScamSniffer "🚨 BLOCKED", scamProbability MUST be ≥ 90 — this is a confirmed crypto phishing domain.
+- If PRE-CHECKS show VirusTotal "🚨 MALICIOUS" (5+ engines), scamProbability MUST be ≥ 90.
+- If PRE-CHECKS show VirusTotal "⚠️ SUSPICIOUS", scamProbability MUST be ≥ 60.
+- If PRE-CHECKS show VirusTotal "✅ CLEAN" with 0 detections across many engines, this is strong evidence of safety — weight accordingly.
 
 OUTPUT JSON ONLY:
 {
