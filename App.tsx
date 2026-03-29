@@ -474,6 +474,35 @@ const App: React.FC = () => {
               language={language}
               isSeniorMode={isSeniorMode}
             />
+
+            {/* SMS Scam Quick Examples — shown only on landing */}
+            {loadingState === 'IDLE' && !isSeniorMode && (
+              <div className="max-w-2xl mx-auto mt-5">
+                <p className="text-xs text-gray-600 text-center mb-2 uppercase tracking-widest">
+                  {language === 'zh-TW' ? '常見詐騙簡訊範例，點擊即可檢測' : 'Common scam SMS — click to check'}
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {(language === 'zh-TW' ? [
+                    { label: '🏦 假銀行簡訊', text: '【中國信託】您的帳戶異常，系統更新將暫時關閉您的帳戶，請在48小時內點擊連結實名驗證，逾期將關閉信用卡功能。' },
+                    { label: '💸 假貸款簡訊', text: '《輕鬆借》30萬內當日撥款，免聯徵、免押免保，有工作來就借，線上諮詢 maac.io/xxxxx' },
+                    { label: '📈 假投資簡訊', text: '老師今日開放限額名額，穩定獲利每月15%，加入LINE群組免費體驗模擬金交易，名額有限！' },
+                    { label: '🎁 假中獎簡訊', text: '恭喜您獲選本月幸運得獎者，獎金NT$50,000，請點擊連結填寫個人資料以便匯款。' },
+                  ] : [
+                    { label: '🏦 Fake bank alert', text: 'Your account has been flagged for suspicious activity. Click to verify your identity within 24 hours or your account will be suspended.' },
+                    { label: '💸 Loan scam', text: 'Fast loan approved! Up to $300,000, no credit check, same-day payout. Contact LINE: bit.ly/xxxxx' },
+                    { label: '📈 Fake investment', text: 'Our AI trading group guarantees 15% monthly returns. Join our LINE group for a free simulation fund trial. Limited spots!' },
+                  ]).map(({ label, text }) => (
+                    <button
+                      key={label}
+                      onClick={() => handleSearch(text, 'SMS_TEXT')}
+                      className="px-3 py-1.5 rounded-full border border-gray-700 bg-gray-800/60 hover:border-crypto-accent/60 hover:bg-gray-700 text-xs text-gray-400 hover:text-crypto-accent transition-all"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
         </div>
 
         {/* Loading State Overlay */}
