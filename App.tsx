@@ -708,6 +708,26 @@ const App: React.FC = () => {
           </div>
       )}
 
+      {/* Footer: Free API Acknowledgments */}
+      <footer className="mt-16 border-t border-gray-800 py-8 px-4">
+        <div className="container mx-auto text-center">
+          <p className="text-xs text-gray-600 mb-3 uppercase tracking-widest font-display">
+            {language === 'zh-TW' ? '感謝以下免費服務的支持' : 'Powered by free & open services'}
+          </p>
+          <div className="flex flex-wrap justify-center gap-4 text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-crypto-accent" />
+              <span>ScamSniffer Scam Database</span>
+            </span>
+            <span className="text-gray-700">·</span>
+            <span className="flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-crypto-accent" />
+              <span>VirusTotal</span>
+            </span>
+          </div>
+        </div>
+      </footer>
+
     </div>
   );
 };
