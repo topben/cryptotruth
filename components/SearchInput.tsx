@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Loader2, AtSign, Link, Phone, MessageSquare, ImagePlus, FileText, X } from 'lucide-react';
+import { Search, Loader2, AtSign, Link, Phone, MessageSquare, ImagePlus, FileText, X, ScanText } from 'lucide-react';
 import { Language, InputType } from '../types';
+import { createWorker } from 'tesseract.js';
 
 type InputMode = 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE';
 
@@ -33,6 +34,9 @@ const TRANSLATIONS = {
     txtReady: '{name} loaded — click Check to analyze',
     pasteImage: 'or paste a screenshot (Ctrl+V) · or upload a .txt file',
     txtTooLarge: 'File too large — showing first 50,000 characters',
+    ocrRunning: 'Reading text from screenshot...',
+    ocrDone: 'Text extracted — ready to check',
+    ocrFailed: 'Could not read text — please type it manually',
   },
   'zh-TW': {
     placeholder: '貼上網址、電話號碼、@帳號或可疑訊息...',
@@ -55,6 +59,9 @@ const TRANSLATIONS = {
     txtReady: '已載入 {name}，點擊「檢查」開始分析',
     pasteImage: '或直接貼上截圖（Ctrl+V）· 或上傳 .txt 檔案',
     txtTooLarge: '檔案過大，僅顯示前 50,000 字元',
+    ocrRunning: '正在辨識截圖文字...',
+    ocrDone: '文字已擷取，可以開始檢查',
+    ocrFailed: '無法辨識文字，請手動輸入',
   },
   vi: {
     placeholder: 'Dán liên kết, số điện thoại, @tài khoản hoặc tin nhắn đáng ngờ...',
@@ -77,6 +84,9 @@ const TRANSLATIONS = {
     txtReady: 'Đã tải {name} — nhấn Kiểm tra để phân tích',
     pasteImage: 'hoặc dán ảnh chụp màn hình (Ctrl+V) · hoặc tải file .txt',
     txtTooLarge: 'File quá lớn — chỉ hiển thị 50.000 ký tự đầu tiên',
+    ocrRunning: 'Đang đọc văn bản từ ảnh chụp màn hình...',
+    ocrDone: 'Đã trích xuất văn bản — sẵn sàng kiểm tra',
+    ocrFailed: 'Không thể đọc văn bản — vui lòng nhập thủ công',
   },
 };
 
@@ -175,6 +185,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
   const [input, setInput] = useState('');
   const [image, setImage] = useState<{ dataUrl: string; base64: string; mediaType: string } | null>(null);
   const [txtFileName, setTxtFileName] = useState<string | null>(null);
+  const [ocrStatus, setOcrStatus] = useState<'idle' | 'running' | 'done' | 'failed'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const txtInputRef = useRef<HTMLInputElement>(null);
 
@@ -200,7 +211,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
     reader.onload = (e) => {
       const originalDataUrl = e.target?.result as string;
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         const canvas = document.createElement('canvas');
         const MAX_DIM = 1920;
         let { width, height } = img;
@@ -217,11 +228,29 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         setImage({ dataUrl, base64, mediaType: 'image/jpeg' });
         setInput('');
         setTxtFileName(null);
+        setOcrStatus('running');
+
+        try {
+          const langs = language === 'vi' ? 'vie+eng' : 'chi_tra+eng';
+          const worker = await createWorker(langs);
+          const { data } = await worker.recognize(dataUrl);
+          await worker.terminate();
+          const extracted = data.text.trim();
+          if (extracted.length > 10) {
+            setInput(extracted);
+            setImage(null);
+            setOcrStatus('done');
+          } else {
+            setOcrStatus('failed');
+          }
+        } catch {
+          setOcrStatus('failed');
+        }
       };
       img.src = originalDataUrl;
     };
     reader.readAsDataURL(file);
-  }, []);
+  }, [language]);
 
   // Handle paste events (image paste via Ctrl+V)
   useEffect(() => {
@@ -266,10 +295,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (image) {
-      onSearch('[screenshot]', 'IMAGE', { base64: image.base64, mediaType: image.mediaType });
-      return;
-    }
+    if (ocrStatus === 'running') return;
     if (!input.trim()) return;
     // Detect at submit time for accuracy (not the debounced display value)
     const finalType = detectInputType(input);
@@ -284,7 +310,7 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
   const submitButton = (extraClass = '') => (
     <button
       type="submit"
-      disabled={isLoading || (!input.trim() && !image)}
+      disabled={isLoading || ocrStatus === 'running' || (!input.trim() && !image)}
       className={`bg-crypto-accent text-crypto-dark font-bold hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
         isSeniorMode ? 'px-8 py-4 rounded-xl text-xl' : 'px-6 py-2 rounded-full'
       } ${extraClass}`}
@@ -314,18 +340,36 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         onChange={(e) => { const f = e.target.files?.[0]; if (f) { loadImageFile(f); setTxtFileName(null); } e.target.value = ''; }}
       />
 
-      {/* Image preview — shown when an image is loaded */}
+      {/* Image preview — shown while OCR is running */}
       {image && (
         <div className="relative mb-3 rounded-2xl overflow-hidden border border-crypto-accent/40 bg-gray-900">
           <img src={image.dataUrl} alt="screenshot preview" className="w-full max-h-64 object-contain" />
-          <button
-            type="button"
-            onClick={() => setImage(null)}
-            className="absolute top-2 right-2 bg-gray-900/80 hover:bg-gray-800 text-gray-300 hover:text-white rounded-full p-1 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-          <p className="text-center text-xs text-crypto-accent py-2">{t.imageReady}</p>
+          {ocrStatus !== 'running' && (
+            <button
+              type="button"
+              onClick={() => { setImage(null); setOcrStatus('idle'); }}
+              className="absolute top-2 right-2 bg-gray-900/80 hover:bg-gray-800 text-gray-300 hover:text-white rounded-full p-1 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+          <div className="flex items-center justify-center gap-2 py-2">
+            {ocrStatus === 'running'
+              ? <Loader2 className="w-4 h-4 text-crypto-accent animate-spin" />
+              : <ScanText className="w-4 h-4 text-crypto-accent" />
+            }
+            <p className="text-xs text-crypto-accent">
+              {ocrStatus === 'running' ? t.ocrRunning : ocrStatus === 'failed' ? t.ocrFailed : t.imageReady}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* OCR done notice */}
+      {ocrStatus === 'done' && !image && input.trim() && (
+        <div className="flex items-center justify-center gap-1.5 mb-2">
+          <ScanText className="w-3 h-3 text-crypto-accent" />
+          <p className="text-xs text-crypto-accent">{t.ocrDone}</p>
         </div>
       )}
 
