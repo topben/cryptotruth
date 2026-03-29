@@ -1266,7 +1266,7 @@ OUTPUT JSON ONLY:
       timestamp: submissionTs,
       language,
       inputType: detectedType,
-      raw: { input: sanitizedInput },
+      raw: { input: inputContent, sanitized: sanitizedInput },
       analysis: {
         trustScore: fullData.trustScore,
         scamProbability: fullData.scamProbability,
@@ -1286,13 +1286,14 @@ OUTPUT JSON ONLY:
     // 2. Log flat summary to Google Sheets for human review & labeling
     // Google Apps Script redirects POST → must follow redirect manually (302 converts POST→GET otherwise)
     const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-    if (webhookUrl) {
+    if (webhookUrl && inputContent.length <= 500) {
       const sheetsPayload = JSON.stringify({
         id: submissionId,
         timestamp: submissionTs,
         language,
         inputType: detectedType,
-        input: sanitizedInput,
+        input: inputContent,
+        sanitizedInput,
         scamProbability: fullData.scamProbability,
         trustScore: fullData.trustScore,
         verdict: fullData.verdict,
