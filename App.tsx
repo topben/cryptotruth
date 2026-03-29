@@ -30,7 +30,7 @@ const UI_TEXT = {
       title: 'Verify First,',
       titleHighlight: 'Trust Later',
       subtitle: 'AI Scam Detection · Risk Analysis · Safety Guide',
-      description: 'Paste a message, link, handle, or phone number. AI breaks down scam patterns and tells you the risks, reasons, and next steps.',
+      description: 'Paste a suspicious message or link — or upload a screenshot. AI breaks down the scam tactics and tells you exactly what to do next.',
       descriptionSenior: 'Got a suspicious message? Paste it here and we\'ll tell you if it\'s safe!'
     },
     loading: {
@@ -92,7 +92,7 @@ const UI_TEXT = {
       message: 'Message',
       unknownIdentity: 'Unknown',
       impersonator: 'Fake',
-      seniorHint: 'Got a suspicious message, link, or phone number? Paste it here and we\'ll check it for you!'
+      seniorHint: 'Got a suspicious message or link? Paste it here and we\'ll check it for you!'
     }
   },
   'zh-TW': {
@@ -107,7 +107,7 @@ const UI_TEXT = {
       title: '先驗證，',
       titleHighlight: '再相信',
       subtitle: 'AI 詐騙偵測 · 風險分析 · 防詐指南',
-      description: '貼上訊息、網址、帳號、電話或截圖，AI 幫你拆解詐騙劇本，告訴你風險、原因與下一步行動。',
+      description: '貼上可疑訊息或網址，或上傳截圖，AI 幫你拆解詐騙手法，告訴你原因與下一步行動。',
       descriptionSenior: '收到可疑訊息？貼上來讓我們幫您檢查是否安全！'
     },
     loading: {
@@ -169,7 +169,7 @@ const UI_TEXT = {
       message: '訊息',
       unknownIdentity: '身分未明',
       impersonator: '冒充者',
-      seniorHint: '收到可疑訊息、連結或電話？貼上來讓我們幫您檢查！'
+      seniorHint: '收到可疑訊息或連結？貼上來讓我們幫您檢查！'
     }
   },
   vi: {
@@ -184,7 +184,7 @@ const UI_TEXT = {
       title: 'Xác minh trước,',
       titleHighlight: 'Tin tưởng sau',
       subtitle: 'Phát hiện lừa đảo AI · Phân tích rủi ro · Hướng dẫn an toàn',
-      description: 'Dán tin nhắn, liên kết, tài khoản hoặc số điện thoại. AI phân tích mô hình lừa đảo và cho bạn biết rủi ro, lý do và các bước tiếp theo.',
+      description: 'Dán tin nhắn hoặc liên kết đáng ngờ — hoặc tải lên ảnh chụp màn hình. AI phân tích thủ thuật lừa đảo và cho bạn biết cần làm gì tiếp theo.',
       descriptionSenior: 'Nhận được tin nhắn đáng ngờ? Dán vào đây và chúng tôi sẽ kiểm tra xem có an toàn không!'
     },
     loading: {
@@ -246,7 +246,7 @@ const UI_TEXT = {
       message: 'Tin nhắn',
       unknownIdentity: 'Danh tính không rõ',
       impersonator: 'Giả mạo',
-      seniorHint: 'Nhận được tin nhắn, liên kết hoặc số điện thoại đáng ngờ? Dán vào đây để chúng tôi kiểm tra!'
+      seniorHint: 'Nhận được tin nhắn hoặc liên kết đáng ngờ? Dán vào đây để chúng tôi kiểm tra!'
     }
   }
 } as const;
@@ -458,51 +458,60 @@ const App: React.FC = () => {
 
         {/* Hero / Search */}
         <div className={`transition-all duration-500 ease-in-out ${analysis ? 'mt-0' : isSeniorMode ? 'mt-6' : 'mt-14'}`}>
-            <div className={`text-center ${isSeniorMode ? 'mb-8' : 'mb-10'}`}>
-                <h1 className={`font-display font-bold text-white mb-4 ${seniorModeStyles.heading}`}>
-                    {t.hero.title} <span className="text-transparent bg-clip-text bg-gradient-to-r from-crypto-accent to-blue-500">{t.hero.titleHighlight}</span>
-                </h1>
+          {/* Hero text — hidden once results are shown */}
+          {!analysis && (
+            <div className={`text-center ${isSeniorMode ? 'mb-8' : 'mb-8'}`}>
+              <h1 className={`font-display font-bold text-white mb-3 ${seniorModeStyles.heading}`}>
+                {t.hero.title} <span className="text-transparent bg-clip-text bg-gradient-to-r from-crypto-accent to-blue-500">{t.hero.titleHighlight}</span>
+              </h1>
 
-                <p className={`text-gray-400 mx-auto max-w-xl ${seniorModeStyles.text}`}>
-                    {isSeniorMode ? t.hero.descriptionSenior : t.hero.description}
+              {!isSeniorMode && (
+                <p className="text-gray-500 mx-auto max-w-xl text-base mb-5">
+                  {t.hero.description}
                 </p>
-            </div>
+              )}
 
-            <SearchInput
-              onSearch={handleSearch}
-              isLoading={loadingState === 'SEARCHING' || loadingState === 'ANALYZING'}
-              language={language}
-              isSeniorMode={isSeniorMode}
-            />
-
-            {/* SMS Scam Quick Examples — shown only on landing */}
-            {loadingState === 'IDLE' && !isSeniorMode && (
-              <div className="max-w-2xl mx-auto mt-5">
-                <p className="text-xs text-gray-600 text-center mb-2 uppercase tracking-widest">
-                  {language === 'zh-TW' ? '常見詐騙簡訊範例，點擊即可檢測' : 'Common scam SMS — click to check'}
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
+              {/* Feature capability pills */}
+              {!isSeniorMode && (
+                <div className="flex flex-wrap justify-center gap-2 mb-6">
                   {(language === 'zh-TW' ? [
-                    { label: '🏦 假銀行簡訊', text: '【中國信託】您的帳戶異常，系統更新將暫時關閉您的帳戶，請在48小時內點擊連結實名驗證，逾期將關閉信用卡功能。' },
-                    { label: '💸 假貸款簡訊', text: '《輕鬆借》30萬內當日撥款，免聯徵、免押免保，有工作來就借，線上諮詢 maac.io/xxxxx' },
-                    { label: '📈 假投資簡訊', text: '老師今日開放限額名額，穩定獲利每月15%，加入LINE群組免費體驗模擬金交易，名額有限！' },
-                    { label: '🎁 假中獎簡訊', text: '恭喜您獲選本月幸運得獎者，獎金NT$50,000，請點擊連結填寫個人資料以便匯款。' },
+                    { icon: '📩', label: '詐騙簡訊' },
+                    { icon: '🔗', label: '可疑網址' },
+                    { icon: '📸', label: '截圖 OCR' },
+                    { icon: '📄', label: '.txt 檔案' },
+                  ] : language === 'vi' ? [
+                    { icon: '📩', label: 'Tin nhắn lừa đảo' },
+                    { icon: '🔗', label: 'Liên kết đáng ngờ' },
+                    { icon: '📸', label: 'Ảnh chụp màn hình' },
+                    { icon: '📄', label: 'File .txt' },
                   ] : [
-                    { label: '🏦 Fake bank alert', text: 'Your account has been flagged for suspicious activity. Click to verify your identity within 24 hours or your account will be suspended.' },
-                    { label: '💸 Loan scam', text: 'Fast loan approved! Up to $300,000, no credit check, same-day payout. Contact LINE: bit.ly/xxxxx' },
-                    { label: '📈 Fake investment', text: 'Our AI trading group guarantees 15% monthly returns. Join our LINE group for a free simulation fund trial. Limited spots!' },
-                  ]).map(({ label, text }) => (
-                    <button
-                      key={label}
-                      onClick={() => handleSearch(text, 'SMS_TEXT')}
-                      className="px-3 py-1.5 rounded-full border border-gray-700 bg-gray-800/60 hover:border-crypto-accent/60 hover:bg-gray-700 text-xs text-gray-400 hover:text-crypto-accent transition-all"
-                    >
-                      {label}
-                    </button>
+                    { icon: '📩', label: 'Scam SMS' },
+                    { icon: '🔗', label: 'Suspicious URL' },
+                    { icon: '📸', label: 'Screenshot OCR' },
+                    { icon: '📄', label: '.txt File' },
+                  ]).map(({ icon, label }) => (
+                    <span key={label} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-800 border border-gray-700 text-xs text-gray-400">
+                      <span>{icon}</span>
+                      <span>{label}</span>
+                    </span>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+
+              {isSeniorMode && (
+                <p className={`text-gray-400 mx-auto max-w-xl ${seniorModeStyles.text}`}>
+                  {t.hero.descriptionSenior}
+                </p>
+              )}
+            </div>
+          )}
+
+          <SearchInput
+            onSearch={handleSearch}
+            isLoading={loadingState === 'SEARCHING' || loadingState === 'ANALYZING'}
+            language={language}
+            isSeniorMode={isSeniorMode}
+          />
         </div>
 
         {/* Loading State Overlay */}
