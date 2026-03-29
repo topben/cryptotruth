@@ -1257,6 +1257,12 @@ OUTPUT JSON ONLY:
     setCachedAnalysis(cacheKey, language, fullData);
 
     // === ML DATA COLLECTION (fire-and-forget, never blocks response) ===
+    // Skip: bot requests (bypass rate limit), force refresh (duplicate records), oversized input
+    const shouldCollectML = !isBotRequest && !forceRefresh && inputContent.length <= 10000;
+    if (!shouldCollectML) {
+      return res.status(200).json(fullData);
+    }
+
     const submissionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const submissionTs = new Date().toISOString();
 
