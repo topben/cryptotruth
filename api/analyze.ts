@@ -1284,23 +1284,35 @@ OUTPUT JSON ONLY:
       .catch(() => { /* silently ignore */ });
 
     // 2. Log flat summary to Google Sheets for human review & labeling
+    // Google Apps Script redirects POST → must follow redirect manually (302 converts POST→GET otherwise)
     const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
     if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: submissionId,
-          timestamp: submissionTs,
-          language,
-          inputType: detectedType,
-          input: sanitizedInput,
-          scamProbability: fullData.scamProbability,
-          trustScore: fullData.trustScore,
-          verdict: fullData.verdict,
-          riskSignals: fullData.riskSignals,
-        }),
-      }).catch(() => { /* silently ignore */ });
+      const sheetsPayload = JSON.stringify({
+        id: submissionId,
+        timestamp: submissionTs,
+        language,
+        inputType: detectedType,
+        input: sanitizedInput,
+        scamProbability: fullData.scamProbability,
+        trustScore: fullData.trustScore,
+        verdict: fullData.verdict,
+        riskSignals: fullData.riskSignals,
+      });
+      (async () => {
+        try {
+          // Step 1: get redirect URL without following it
+          const r1 = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: sheetsPayload,
+            redirect: 'manual',
+          });
+          const redirectUrl = r1.headers.get('location');
+          if (!redirectUrl) return;
+          // Step 2: GET the echo URL to complete the Apps Script response cycle
+          await fetch(redirectUrl, { method: 'GET' });
+        } catch { /* silently ignore */ }
+      })();
     }
 
     return res.status(200).json({
