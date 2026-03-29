@@ -1256,6 +1256,24 @@ OUTPUT JSON ONLY:
     // Save to cache (async, don't wait)
     setCachedAnalysis(cacheKey, language, fullData);
 
+    // Log submission to Google Sheets (fire-and-forget, never blocks response)
+    const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+    if (webhookUrl && !fullData.cached) {
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timestamp: new Date().toISOString(),
+          language,
+          inputType: detectedType,
+          input: sanitizedInput,
+          scamProbability: fullData.scamProbability,
+          verdict: fullData.verdict,
+          cached: false,
+        }),
+      }).catch(() => { /* silently ignore — never affect main response */ });
+    }
+
     return res.status(200).json({
       ...fullData,
       source: 'api'
