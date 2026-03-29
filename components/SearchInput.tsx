@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Loader2, AtSign, Link, Phone, MessageSquare, ImagePlus, FileText, X, ScanText } from 'lucide-react';
+import { Search, Loader2, Link, MessageSquare, ImagePlus, FileText, X, ScanText } from 'lucide-react';
 import { Language, InputType } from '../types';
 import { createWorker } from 'tesseract.js';
 
-type InputMode = 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE';
+type InputMode = 'URL' | 'SMS_TEXT';
 
 interface SearchInputProps {
   onSearch: (input: string, inputType?: InputType, imageData?: { base64: string; mediaType: string }) => void;
@@ -14,17 +14,15 @@ interface SearchInputProps {
 
 const TRANSLATIONS = {
   en: {
-    placeholder: 'Paste a link, phone number, @handle, or suspicious message...',
-    placeholderSenior: 'Paste any suspicious link, phone number, or message here...',
+    placeholder: 'Paste a suspicious link or message...',
+    placeholderSenior: 'Paste any suspicious link or message here...',
     scanning: 'Scanning...',
     scanningSenior: 'Checking...',
     audit: 'Check',
     auditSenior: 'Is This Safe?',
     detected: {
-      HANDLE: 'Account',
       URL: 'Link',
       SMS_TEXT: 'Message',
-      PHONE: 'Phone Number',
     },
     detectedLabel: 'Detected:',
     scenarioHint: 'Common scam scenarios — click to try an example:',
@@ -39,17 +37,15 @@ const TRANSLATIONS = {
     ocrFailed: 'Could not read text — please type it manually',
   },
   'zh-TW': {
-    placeholder: '貼上網址、電話號碼、@帳號或可疑訊息...',
-    placeholderSenior: '把可疑的連結、電話號碼或訊息貼在這裡...',
+    placeholder: '貼上可疑網址或訊息...',
+    placeholderSenior: '把可疑的連結或訊息貼在這裡...',
     scanning: '掃描中...',
     scanningSenior: '檢查中...',
     audit: '檢查',
     auditSenior: '這安全嗎？',
     detected: {
-      HANDLE: '帳號',
       URL: '網址',
       SMS_TEXT: '訊息',
-      PHONE: '電話號碼',
     },
     detectedLabel: '偵測到：',
     scenarioHint: '常見詐騙情境，點擊體驗範例：',
@@ -64,17 +60,15 @@ const TRANSLATIONS = {
     ocrFailed: '無法辨識文字，請手動輸入',
   },
   vi: {
-    placeholder: 'Dán liên kết, số điện thoại, @tài khoản hoặc tin nhắn đáng ngờ...',
-    placeholderSenior: 'Dán bất kỳ liên kết, số điện thoại hoặc tin nhắn đáng ngờ vào đây...',
+    placeholder: 'Dán liên kết hoặc tin nhắn đáng ngờ...',
+    placeholderSenior: 'Dán bất kỳ liên kết hoặc tin nhắn đáng ngờ vào đây...',
     scanning: 'Đang quét...',
     scanningSenior: 'Đang kiểm tra...',
     audit: 'Kiểm tra',
     auditSenior: 'Có an toàn không?',
     detected: {
-      HANDLE: 'Tài khoản',
       URL: 'Liên kết',
       SMS_TEXT: 'Tin nhắn',
-      PHONE: 'Số điện thoại',
     },
     detectedLabel: 'Phát hiện:',
     scenarioHint: 'Các tình huống lừa đảo phổ biến — nhấn để thử ví dụ:',
@@ -122,12 +116,6 @@ const SCENARIO_CHIPS: Array<{
     sample: '您的包裹無法投遞，請點擊更新地址：https://post-tw-delivery.net/verify',
   },
   {
-    id: 'fake_account',
-    icon: '🎭',
-    label: { en: 'Fake Official Account', 'zh-TW': '假官方帳號', vi: 'Tài khoản chính thức giả' },
-    sample: '@TaiwanBank_Official',
-  },
-  {
     id: 'fake_giveaway',
     icon: '🎁',
     label: { en: 'Fake Giveaway', 'zh-TW': '假抽獎/假活動', vi: 'Quà tặng/sự kiện giả' },
@@ -137,45 +125,20 @@ const SCENARIO_CHIPS: Array<{
 
 const detectInputType = (value: string): InputMode => {
   const trimmed = value.trim();
-  if (!trimmed) return 'SMS_TEXT';
-
-  // Phone: starts with + or digits only, 7–15 digits, short
-  const digitsOnly = trimmed.replace(/[\s\-+()\u200b]/g, '');
-  if (
-    /^[+\d][\d\s\-()]+$/.test(trimmed) &&
-    digitsOnly.length >= 7 &&
-    digitsOnly.length <= 15
-  ) {
-    return 'PHONE';
-  }
-
-  // URL: starts with http(s):// or www.
-  if (/^(https?:\/\/|www\.)/i.test(trimmed)) {
-    return 'URL';
-  }
-
-  // Handle: starts with @ or short pure alphanumeric/underscore
-  if (trimmed.startsWith('@') || /^[a-zA-Z0-9_]{3,15}$/.test(trimmed)) {
-    return 'HANDLE';
-  }
-
+  if (/^(https?:\/\/|www\.)/i.test(trimmed)) return 'URL';
   return 'SMS_TEXT';
 };
 
 const getModeIcon = (mode: InputMode, className: string) => {
   switch (mode) {
-    case 'HANDLE': return <AtSign className={className} />;
-    case 'URL':    return <Link className={className} />;
+    case 'URL':      return <Link className={className} />;
     case 'SMS_TEXT': return <MessageSquare className={className} />;
-    case 'PHONE':  return <Phone className={className} />;
   }
 };
 
 const DETECTED_COLORS: Record<InputMode, string> = {
-  HANDLE: 'text-crypto-accent border-crypto-accent/40 bg-crypto-accent/10',
-  URL:    'text-blue-400 border-blue-400/40 bg-blue-400/10',
+  URL:      'text-blue-400 border-blue-400/40 bg-blue-400/10',
   SMS_TEXT: 'text-purple-400 border-purple-400/40 bg-purple-400/10',
-  PHONE:  'text-green-400 border-green-400/40 bg-green-400/10',
 };
 
 const MAX_TXT_CHARS = 50_000;
@@ -289,20 +252,15 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [input]);
 
-  // For layout decisions (textarea), use long-text heuristic only — no type flicker
-  const isLongText = input.length > 80 || input.includes('\n');
-  const useTextarea = isLongText || (displayedType === 'SMS_TEXT' && input.trim().length > 0);
+  // Switch to textarea only when content is long or multi-line — never based on detected type
+  const useTextarea = input.length > 80 || input.includes('\n');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (ocrStatus === 'running') return;
     if (!input.trim()) return;
-    // Detect at submit time for accuracy (not the debounced display value)
     const finalType = detectInputType(input);
-    const value = finalType === 'HANDLE' && input.trim().startsWith('@')
-      ? input.trim().slice(1)
-      : input.trim();
-    onSearch(value, finalType);
+    onSearch(input.trim(), finalType);
   };
 
   const placeholder = isSeniorMode ? t.placeholderSenior : t.placeholder;
@@ -485,12 +443,12 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         <p className="text-center text-xs text-gray-600 mt-2">{t.pasteImage}</p>
       )}
 
-      {/* Detected Type Badge — only shown after debounce (600ms after user stops typing) */}
-      {displayedType && input.trim() && (
+      {/* Detected Type Badge — only shown for URL (SMS_TEXT is default, no need to label) */}
+      {displayedType === 'URL' && input.trim() && (
         <div className="flex justify-center mt-3">
-          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-all ${DETECTED_COLORS[displayedType]}`}>
-            {getModeIcon(displayedType, 'w-3 h-3')}
-            {t.detectedLabel} {t.detected[displayedType]}
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-all ${DETECTED_COLORS['URL']}`}>
+            {getModeIcon('URL', 'w-3 h-3')}
+            {t.detectedLabel} {t.detected['URL']}
           </span>
         </div>
       )}
@@ -520,10 +478,10 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         <div className="mt-6 text-center">
           <p className="text-xl text-gray-300">
             {language === 'zh-TW'
-              ? '收到可疑訊息、連結或電話？貼上來讓我們幫您檢查！'
+              ? '收到可疑訊息或連結？貼上來讓我們幫您檢查！'
               : language === 'vi'
-              ? 'Nhận được tin nhắn, liên kết hoặc số điện thoại đáng ngờ? Dán vào đây để chúng tôi kiểm tra!'
-              : 'Got a suspicious message, link, or phone number? Paste it here and we\'ll check it for you!'}
+              ? 'Nhận được tin nhắn hoặc liên kết đáng ngờ? Dán vào đây để chúng tôi kiểm tra!'
+              : 'Got a suspicious message or link? Paste it here and we\'ll check it for you!'}
           </p>
         </div>
       )}
