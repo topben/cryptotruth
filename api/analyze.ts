@@ -1256,22 +1256,51 @@ OUTPUT JSON ONLY:
     // Save to cache (async, don't wait)
     setCachedAnalysis(cacheKey, language, fullData);
 
-    // Log submission to Google Sheets (fire-and-forget, never blocks response)
+    // === ML DATA COLLECTION (fire-and-forget, never blocks response) ===
+    const submissionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const submissionTs = new Date().toISOString();
+
+    // 1. Save full ML record to Vercel Blob (raw input + complete analysis)
+    const mlRecord = {
+      id: submissionId,
+      timestamp: submissionTs,
+      language,
+      inputType: detectedType,
+      raw: { input: sanitizedInput },
+      analysis: {
+        trustScore: fullData.trustScore,
+        scamProbability: fullData.scamProbability,
+        verdict: fullData.verdict,
+        identityStatus: fullData.identityStatus,
+        riskSignals: fullData.riskSignals,
+        credibilityStrengths: fullData.credibilityStrengths,
+        riskFactors: fullData.riskFactors,
+        suggestedActions: fullData.suggestedActions,
+        groundedSearch: fullData.groundedSearch,
+      },
+    };
+    const blobPath = `ml-data/${submissionTs.slice(0, 7)}/${submissionId}.json`;
+    put(blobPath, JSON.stringify(mlRecord), { access: 'public', addRandomSuffix: false })
+      .catch(() => { /* silently ignore */ });
+
+    // 2. Log flat summary to Google Sheets for human review & labeling
     const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-    if (webhookUrl && !fullData.cached) {
+    if (webhookUrl) {
       fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          timestamp: new Date().toISOString(),
+          id: submissionId,
+          timestamp: submissionTs,
           language,
           inputType: detectedType,
           input: sanitizedInput,
           scamProbability: fullData.scamProbability,
+          trustScore: fullData.trustScore,
           verdict: fullData.verdict,
-          cached: false,
+          riskSignals: fullData.riskSignals,
         }),
-      }).catch(() => { /* silently ignore — never affect main response */ });
+      }).catch(() => { /* silently ignore */ });
     }
 
     return res.status(200).json({
