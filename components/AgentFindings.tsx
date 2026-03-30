@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { AgentVerification, Language, TrustLane } from '../types';
 
 interface AgentFindingsProps {
   agent: AgentVerification;
+  narrative?: string;
   language?: Language;
 }
 
@@ -36,6 +38,10 @@ const LABELS = {
     asks: 'What the page asks you to do',
     observations: 'Risk observations',
     noAsks: 'No high-risk requests observed',
+    technicalDetails: 'Technical details',
+    showDetails: 'Show technical details',
+    hideDetails: 'Hide technical details',
+    noNarrative: 'Agent visited the page and collected technical data. See details below.',
   },
   'zh-TW': {
     title: '我替你點開後，看到了這些事',
@@ -48,6 +54,10 @@ const LABELS = {
     asks: '它下一步想叫你做什麼',
     observations: '風險觀察',
     noAsks: '未觀察到高風險要求',
+    technicalDetails: '技術細節',
+    showDetails: '顯示技術細節',
+    hideDetails: '收起技術細節',
+    noNarrative: 'Agent 已造訪頁面並收集技術資料，詳情請見下方。',
   },
   vi: {
     title: 'Kết quả xác minh của agent',
@@ -60,10 +70,15 @@ const LABELS = {
     asks: 'Trang yêu cầu bạn làm gì',
     observations: 'Quan sát rủi ro',
     noAsks: 'Không phát hiện yêu cầu rủi ro cao',
+    technicalDetails: 'Chi tiết kỹ thuật',
+    showDetails: 'Hiện chi tiết kỹ thuật',
+    hideDetails: 'Ẩn chi tiết kỹ thuật',
+    noNarrative: 'Agent đã truy cập trang và thu thập dữ liệu kỹ thuật. Xem chi tiết bên dưới.',
   },
 };
 
-const AgentFindings: React.FC<AgentFindingsProps> = ({ agent, language = 'zh-TW' }) => {
+const AgentFindings: React.FC<AgentFindingsProps> = ({ agent, narrative, language = 'zh-TW' }) => {
+  const [showDetails, setShowDetails] = useState(false);
   const t = LABELS[language];
   const lang = language === 'zh-TW' ? 'zh' : language === 'vi' ? 'vi' : 'en';
 
@@ -87,86 +102,112 @@ const AgentFindings: React.FC<AgentFindingsProps> = ({ agent, language = 'zh-TW'
     ? PAGE_STATUS_LABEL[(agent as any).pageStatus] ?? null
     : null;
 
+  const hasTechnicalDetails =
+    agent.redirectChain.length > 1 ||
+    (agent.finalLandingPage && agent.finalLandingPage !== agent.originalUrl) ||
+    agent.pageTitle ||
+    agent.riskObservations.length > 0 ||
+    pageStatusInfo;
+
   return (
     <section className="mb-6 rounded-3xl border border-gray-800 bg-gray-900/60 p-5">
       <h3 className="mb-4 text-lg font-semibold text-white">{t.title}</h3>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-3 text-sm text-gray-300">
-          {/* Page status — most important signal, show first */}
-          {pageStatusInfo && (
-            <div>
-              <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.pageStatus}</div>
-              <span className={`font-semibold ${pageStatusInfo.style}`}>
-                {pageStatusInfo[lang]}
-                {(agent as any).httpStatus && (agent as any).pageStatus !== 'observed' && (
-                  <span className="ml-2 text-xs text-gray-500">({(agent as any).httpStatus})</span>
-                )}
-              </span>
-            </div>
-          )}
-          <div>
-            <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.originalUrl}</div>
-            <div className="break-all">{agent.originalUrl ?? 'N/A'}</div>
-          </div>
-          {agent.redirectChain.length > 1 && (
-            <div>
-              <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.redirectChain}</div>
-              <div className="space-y-1">
-                {agent.redirectChain.map((item, idx) => (
-                  <div key={`${item}-${idx}`} className="break-all rounded-xl border border-gray-800 bg-gray-950/70 px-3 py-2 flex items-start gap-2">
-                    <span className="text-gray-600 flex-shrink-0 text-xs mt-0.5">{idx + 1}</span>
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {agent.finalLandingPage && agent.finalLandingPage !== agent.originalUrl && (
-            <div>
-              <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.landing}</div>
-              <div className="break-all">{agent.finalLandingPage}</div>
-            </div>
-          )}
-          {agent.pageTitle && (
-            <div>
-              <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.pageTitle}</div>
-              <div>{agent.pageTitle}</div>
-            </div>
-          )}
-        </div>
 
-        <div className="space-y-3 text-sm text-gray-300">
-          <div>
-            <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.asks}</div>
-            <div className="flex flex-wrap gap-2">
-              {asks.length > 0 ? asks.map((ask) => (
-                <span key={ask} className="rounded-full border border-orange-700/50 bg-orange-950/30 px-3 py-1 text-orange-200">
-                  {ask}
-                </span>
-              )) : <span className="text-gray-500">{t.noAsks}</span>}
-            </div>
-          </div>
-
-          {agent.visibleSummary && (
-            <div className="rounded-2xl border border-gray-800 bg-gray-950/70 p-3 leading-relaxed text-gray-300">
-              {agent.visibleSummary}
-            </div>
-          )}
-
-          {agent.riskObservations.length > 0 && (
-            <div>
-              <div className="mb-2 text-xs uppercase tracking-widest text-gray-500">{t.observations}</div>
-              <div className="flex flex-wrap gap-2">
-                {agent.riskObservations.map((item) => (
-                  <span key={`${item.label}-${item.value}`} className={`rounded-full border px-3 py-1 text-xs ${LANE_STYLE[item.lane]}`}>
-                    {item.label}: {item.value}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+      {/* Primary: LLM narrative */}
+      <div className="mb-4 rounded-2xl border border-gray-700 bg-gray-950/60 p-4 text-sm text-gray-200 leading-relaxed">
+        {narrative && narrative.trim()
+          ? narrative
+          : t.noNarrative}
       </div>
+
+      {/* Secondary: what the page asks + toggle for full details */}
+      {asks.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.asks}</div>
+          <div className="flex flex-wrap gap-2">
+            {asks.map((ask) => (
+              <span key={ask} className="rounded-full border border-orange-700/50 bg-orange-950/30 px-3 py-1 text-sm text-orange-200">
+                {ask}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Expandable technical details */}
+      {hasTechnicalDetails && (
+        <div>
+          <button
+            onClick={() => setShowDetails(v => !v)}
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors mt-2"
+          >
+            {showDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {showDetails ? t.hideDetails : t.showDetails}
+          </button>
+
+          {showDetails && (
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div className="space-y-3 text-sm text-gray-300">
+                {pageStatusInfo && (
+                  <div>
+                    <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.pageStatus}</div>
+                    <span className={`font-semibold ${pageStatusInfo.style}`}>
+                      {pageStatusInfo[lang]}
+                      {(agent as any).httpStatus && (agent as any).pageStatus !== 'observed' && (
+                        <span className="ml-2 text-xs text-gray-500">({(agent as any).httpStatus})</span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.originalUrl}</div>
+                  <div className="break-all">{agent.originalUrl ?? 'N/A'}</div>
+                </div>
+                {agent.redirectChain.length > 1 && (
+                  <div>
+                    <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.redirectChain}</div>
+                    <div className="space-y-1">
+                      {agent.redirectChain.map((item, idx) => (
+                        <div key={`${item}-${idx}`} className="break-all rounded-xl border border-gray-800 bg-gray-950/70 px-3 py-2 flex items-start gap-2">
+                          <span className="text-gray-600 flex-shrink-0 text-xs mt-0.5">{idx + 1}</span>
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {agent.finalLandingPage && agent.finalLandingPage !== agent.originalUrl && (
+                  <div>
+                    <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.landing}</div>
+                    <div className="break-all">{agent.finalLandingPage}</div>
+                  </div>
+                )}
+                {agent.pageTitle && (
+                  <div>
+                    <div className="mb-1 text-xs uppercase tracking-widest text-gray-500">{t.pageTitle}</div>
+                    <div>{agent.pageTitle}</div>
+                  </div>
+                )}
+              </div>
+
+              {agent.riskObservations.length > 0 && (
+                <div className="space-y-3 text-sm text-gray-300">
+                  <div>
+                    <div className="mb-2 text-xs uppercase tracking-widest text-gray-500">{t.observations}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {agent.riskObservations.map((item) => (
+                        <span key={`${item.label}-${item.value}`} className={`rounded-full border px-3 py-1 text-xs ${LANE_STYLE[item.lane]}`}>
+                          {item.label}: {item.value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 };

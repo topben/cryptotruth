@@ -696,6 +696,7 @@ const App: React.FC = () => {
 
             <AgentFindings
               agent={analysis.agentVerification}
+              narrative={(analysis as any).agentNarrativeDescription}
               language={language}
             />
 

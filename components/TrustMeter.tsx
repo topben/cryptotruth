@@ -6,96 +6,134 @@ interface TrustMeterProps {
   language: Language;
 }
 
-const TRANSLATIONS = {
-  en: {
-    label: 'Trust Score',
-    legend: 'LEGEND',
-    trusted: 'TRUSTED',
-    mixed: 'MIXED',
-    risky: 'RISKY',
-    scammer: 'SCAM ALERT',
+// 5 risk levels keyed by scamProbability (derived as 100 - trustScore)
+// We receive trustScore, so convert internally
+const LEVELS = [
+  {
+    maxTrust: 100, // trust 80-100 → sp 0-20
+    minTrust: 80,
+    bars: 5,
+    color: 'bg-emerald-500',
+    textColor: 'text-emerald-400',
+    borderColor: 'border-emerald-700/50',
+    bgColor: 'bg-emerald-950/30',
+    label: {
+      'zh-TW': '幾乎沒有風險',
+      en: 'Very low risk',
+      vi: 'Rủi ro rất thấp',
+    },
+    desc: {
+      'zh-TW': '目前沒有發現足以令人擔心的跡象。',
+      en: 'No concerning signals found.',
+      vi: 'Không tìm thấy tín hiệu đáng lo ngại.',
+    },
   },
-  'zh-TW': {
-    label: '信任分數',
-    legend: '傳奇人物',
-    trusted: '值得信任',
-    mixed: '評價不一',
-    risky: '風險較高',
-    scammer: '詐騙警示',
+  {
+    maxTrust: 79,
+    minTrust: 60,
+    bars: 4,
+    color: 'bg-lime-500',
+    textColor: 'text-lime-400',
+    borderColor: 'border-lime-700/50',
+    bgColor: 'bg-lime-950/30',
+    label: {
+      'zh-TW': '有幾個值得注意的地方',
+      en: 'A few things to watch',
+      vi: 'Một vài điều cần lưu ý',
+    },
+    desc: {
+      'zh-TW': '整體看來還算正常，但有部分資訊需要再確認。',
+      en: 'Generally looks fine, but a few details need verification.',
+      vi: 'Nhìn chung ổn, nhưng một số chi tiết cần xác minh.',
+    },
   },
-  vi: {
-    label: 'Điểm tin cậy',
-    legend: 'HUYỀN THOẠI',
-    trusted: 'ĐÁNG TIN',
-    mixed: 'HỖN HỢP',
-    risky: 'RỦI RO',
-    scammer: 'CẢNH BÁO LỪA ĐẢO',
+  {
+    maxTrust: 59,
+    minTrust: 40,
+    bars: 3,
+    color: 'bg-amber-500',
+    textColor: 'text-amber-400',
+    borderColor: 'border-amber-700/50',
+    bgColor: 'bg-amber-950/30',
+    label: {
+      'zh-TW': '有明顯可疑跡象',
+      en: 'Noticeable suspicious signs',
+      vi: 'Dấu hiệu đáng ngờ rõ ràng',
+    },
+    desc: {
+      'zh-TW': '建議在繼續之前先透過官方管道確認。',
+      en: 'Verify through official channels before proceeding.',
+      vi: 'Xác minh qua kênh chính thức trước khi tiếp tục.',
+    },
   },
-};
+  {
+    maxTrust: 39,
+    minTrust: 20,
+    bars: 2,
+    color: 'bg-orange-500',
+    textColor: 'text-orange-400',
+    borderColor: 'border-orange-700/50',
+    bgColor: 'bg-orange-950/30',
+    label: {
+      'zh-TW': '風險相當高',
+      en: 'Quite high risk',
+      vi: 'Rủi ro khá cao',
+    },
+    desc: {
+      'zh-TW': '有多個紅旗訊號，強烈建議先停下來，不要繼續操作。',
+      en: 'Multiple red flags — strongly recommend stopping and not proceeding.',
+      vi: 'Nhiều dấu hiệu cảnh báo — khuyên bạn dừng lại.',
+    },
+  },
+  {
+    maxTrust: 19,
+    minTrust: 0,
+    bars: 1,
+    color: 'bg-red-500',
+    textColor: 'text-red-400',
+    borderColor: 'border-red-700/50',
+    bgColor: 'bg-red-950/30',
+    label: {
+      'zh-TW': '幾乎確定是詐騙',
+      en: 'Almost certainly a scam',
+      vi: 'Gần như chắc chắn là lừa đảo',
+    },
+    desc: {
+      'zh-TW': '這個內容符合多種詐騙特徵，請不要繼續，並考慮向 165 回報。',
+      en: 'Matches multiple scam patterns — do not proceed, consider reporting to 165.',
+      vi: 'Khớp với nhiều đặc điểm lừa đảo — đừng tiếp tục, cân nhắc báo cáo.',
+    },
+  },
+];
 
 const TrustMeter: React.FC<TrustMeterProps> = ({ score, language }) => {
-  const t = TRANSLATIONS[language as keyof typeof TRANSLATIONS] ?? TRANSLATIONS.en;
-
-  // Color calculation based on score
-  const getColor = (val: number) => {
-    if (val >= 80) return 'text-crypto-success border-crypto-success shadow-crypto-success/50';
-    if (val >= 50) return 'text-yellow-400 border-yellow-400 shadow-yellow-400/50';
-    return 'text-crypto-danger border-crypto-danger shadow-crypto-danger/50';
-  };
-
-  const getLabel = (val: number) => {
-    if (val >= 90) return t.legend;
-    if (val >= 75) return t.trusted;
-    if (val >= 50) return t.mixed;
-    if (val >= 30) return t.risky;
-    return t.scammer;
-  };
-
-  const colorClass = getColor(score);
-
-  // Increased radius to fill the 160px box better (was 45)
-  const radius = 64;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (score / 100) * circumference;
+  const lang = language as keyof typeof LEVELS[0]['label'];
+  const level = LEVELS.find(l => score >= l.minTrust && score <= l.maxTrust) ?? LEVELS[4];
 
   return (
-    <div className="flex flex-col items-center justify-center p-6 bg-crypto-card rounded-2xl shadow-xl border border-gray-800 h-full w-full">
-      <div className="relative w-40 h-40 flex items-center justify-center">
-        {/* Background Circle */}
-        <svg className="absolute w-full h-full transform -rotate-90 drop-shadow-md" viewBox="0 0 160 160">
-          <circle
-            cx="80"
-            cy="80"
-            r={radius}
-            stroke="currentColor"
-            strokeWidth="10"
-            fill="transparent"
-            className="text-gray-800 opacity-40"
-          />
-          {/* Progress Circle */}
-          <circle
-            cx="80"
-            cy="80"
-            r={radius}
-            stroke="currentColor"
-            strokeWidth="10"
-            fill="transparent"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            className={`transition-all duration-1000 ease-out ${colorClass.split(' ')[0]}`}
-          />
-        </svg>
-        <div className="flex flex-col items-center z-10">
-            <span className={`text-5xl font-display font-bold ${colorClass.split(' ')[0]} drop-shadow-sm`}>
-                {score}
-            </span>
-            <span className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 font-semibold">{t.label}</span>
+    <div className={`rounded-2xl border p-5 ${level.bgColor} ${level.borderColor}`}>
+      {/* Label row */}
+      <div className="flex items-center justify-between mb-3">
+        <span className={`font-bold text-base ${level.textColor}`}>
+          {level.label[lang] ?? level.label.en}
+        </span>
+        {/* 5-bar indicator */}
+        <div className="flex items-end gap-1">
+          {[1, 2, 3, 4, 5].map(n => (
+            <div
+              key={n}
+              className={`w-2.5 rounded-sm transition-all ${
+                n <= level.bars ? level.color : 'bg-gray-700'
+              }`}
+              style={{ height: `${8 + n * 4}px` }}
+            />
+          ))}
         </div>
       </div>
-      <div className={`mt-6 px-6 py-2 rounded-full border ${colorClass} bg-opacity-10 font-bold tracking-widest text-sm shadow-lg`}>
-        {getLabel(score)}
-      </div>
+      {/* Plain language description */}
+      <p className="text-sm text-gray-300 leading-relaxed">
+        {level.desc[lang] ?? level.desc.en}
+      </p>
     </div>
   );
 };
