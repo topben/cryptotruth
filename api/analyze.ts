@@ -153,7 +153,7 @@ const generateActions = (scamProbability: number, riskSignals: any[], language: 
     });
     actions.push({
       label: language === 'zh-TW' ? '📋 向警政署檢舉' : '📋 Report to Police',
-      actionUrl: 'https://165.npa.gov.tw/',
+      actionUrl: 'https://165.npa.gov.tw/#/report/call/02',
       type: 'REPORT',
       priority: 3
     });
@@ -166,7 +166,7 @@ const generateActions = (scamProbability: number, riskSignals: any[], language: 
     });
     actions.push({
       label: language === 'zh-TW' ? '📋 回報可疑訊息' : '📋 Report Suspicious Message',
-      actionUrl: 'https://165.npa.gov.tw/',
+      actionUrl: 'https://165.npa.gov.tw/#/report/call/02',
       type: 'REPORT',
       priority: 2
     });
@@ -1056,7 +1056,7 @@ function buildPrimaryActions(officialRoute: any, language: string): any[] {
     },
     {
       label: zh ? '立即回報這則可疑內容' : 'Report this suspicious content now',
-      actionUrl: 'https://165.npa.gov.tw/',
+      actionUrl: 'https://165.npa.gov.tw/#/report/call/02',
       kind: 'REPORT',
       emphasis: 'secondary',
       description: zh ? '帶著這次整理好的證據包，直接向 165 或平台檢舉。' : 'Use the evidence pack when reporting.',

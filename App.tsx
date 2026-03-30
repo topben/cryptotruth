@@ -17,6 +17,7 @@ import EvidencePack from './components/EvidencePack';
 import VerdictSummary from './components/VerdictSummary';
 import PrimaryActions from './components/PrimaryActions';
 import AgentFindings from './components/AgentFindings';
+import ReportModal from './components/ReportModal';
 import { ShieldAlert, Search, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, ChevronDown, ThumbsUp, ThumbsDown, RotateCcw, ArrowLeft } from 'lucide-react';
 
 // UI Text dictionary for all static text
@@ -270,6 +271,7 @@ const App: React.FC = () => {
   const [langMenuOpen, setLangMenuOpen] = useState<boolean>(false);
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
   const [loadingStep, setLoadingStep] = useState<1 | 2 | 3>(1);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -680,6 +682,7 @@ const App: React.FC = () => {
               actions={analysis.primaryActions}
               officialRoute={analysis.officialRoute}
               language={language}
+              onReport={() => setReportModalOpen(true)}
             />
 
             <InterruptWarning
@@ -763,6 +766,7 @@ const App: React.FC = () => {
                 scamProbability={analysis.scamProbability}
                 language={language}
                 isSeniorMode={isSeniorMode}
+                onReport={() => setReportModalOpen(true)}
               />
             )}
 
@@ -890,6 +894,15 @@ const App: React.FC = () => {
             <Search size={18} /> {t.search.newSearch}
           </button>
         </div>
+      )}
+
+      {/* 165 Report Modal */}
+      {reportModalOpen && analysis && (
+        <ReportModal
+          analysis={analysis}
+          language={language}
+          onClose={() => setReportModalOpen(false)}
+        />
       )}
 
       {/* Footer: Free API Acknowledgments */}
