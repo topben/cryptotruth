@@ -1182,6 +1182,44 @@ async function buildAgentVerification(normalizedInput: any, inputType: string): 
   }
 }
 
+/**
+ * Build a concise plain-text summary of what the agent sandbox observed.
+ * This is injected into the LLM prompt so it can write natural language descriptions.
+ */
+function buildAgentSummaryForPrompt(av: any): string {
+  if (!av || av.status === 'NOT_RUN') return '';
+  const lines: string[] = ['=== AGENT SANDBOX FINDINGS (what our bot observed when accessing the URL) ==='];
+  const statusMap: Record<string, string> = {
+    OBSERVED_URL:  'Successfully loaded and observed',
+    BOT_BLOCKED:   'Blocked by bot/Cloudflare protection (page refused automated access)',
+    NOT_FOUND:     'Page returned HTTP 404 — content does not exist at this URL',
+    LIMITED:       'Could not fully load page (timeout or network error)',
+  };
+  lines.push(`Result: ${statusMap[av.status] ?? av.status}`);
+  if (av.httpStatus) lines.push(`HTTP status: ${av.httpStatus}`);
+  if (av.redirectChain?.length > 1) {
+    lines.push(`Redirect chain (${av.redirectChain.length} hops):`);
+    av.redirectChain.forEach((url: string, i: number) => lines.push(`  ${i + 1}. ${url}`));
+  }
+  if (av.finalLandingPage && av.finalLandingPage !== av.originalUrl) {
+    lines.push(`Final landing URL: ${av.finalLandingPage}`);
+  }
+  if (av.pageTitle) lines.push(`Page title: "${av.pageTitle}"`);
+  if (av.visibleSummary) lines.push(`Visible page text (first 600 chars): ${av.visibleSummary}`);
+  const flags = [
+    av.asksForLogin       && 'LOGIN credentials',
+    av.asksForOtp         && 'OTP / verification code',
+    av.asksForPayment     && 'PAYMENT / credit card / transfer',
+    av.asksForAppDownload && 'APP DOWNLOAD (APK or store link)',
+    av.asksToAddChat      && 'external chat (LINE/Telegram/WhatsApp)',
+  ].filter(Boolean);
+  if (flags.length > 0) lines.push(`Page asks user to provide/do: ${flags.join(', ')}`);
+  if (av.ctaButtons?.length > 0) lines.push(`CTA buttons found: ${av.ctaButtons.slice(0, 6).join(' | ')}`);
+  if (av.detectedPattern) lines.push(`Detected page type pattern: ${av.detectedPattern}`);
+  lines.push('=== END AGENT FINDINGS ===');
+  return lines.join('\n');
+}
+
 function deriveFinalVerdict(scamProbability: number): 'A_MARKETING' | 'B_RISKY_MARKETING' | 'C_SUSPICIOUS_NEEDS_VERIFICATION' | 'D_HIGH_RISK_SCAM' {
   if (scamProbability >= 75) return 'D_HIGH_RISK_SCAM';
   if (scamProbability >= 45) return 'C_SUSPICIOUS_NEEDS_VERIFICATION';
@@ -1451,8 +1489,30 @@ export default async function handler(req: any, res: any) {
     // Build prompt based on input type
     const buildPrompt = () => {
       const langInstruction = language === 'zh-TW'
-        ? 'Traditional Chinese (繁體中文). You MUST write ALL output text fields — including "d", "b", "v", "c" array items, "r" array items, "rs[].e" evidence strings, and "h[].x" detail strings — entirely in Traditional Chinese (繁體中文). Do not use English in any text field.'
+        ? 'Traditional Chinese (繁體中文). You MUST write ALL output text fields — including "d", "b", "v", "cn", "ag", "c" array items, "r" array items, "rs[].e" evidence strings, and "h[].x" detail strings — entirely in Traditional Chinese (繁體中文). Do not use English in any text field.'
+        : language === 'vi'
+        ? 'Vietnamese (Tiếng Việt). Write ALL output text fields in Vietnamese.'
         : 'English. Write all output text fields in English.';
+
+      const agentSection = buildAgentSummaryForPrompt(agentVerification);
+      const agFieldInstruction = agentSection
+        ? `
+${agentSection}
+
+AGENT NARRATIVE FIELD ("ag"):
+Write 2-3 sentences describing what the agent observed, in plain conversational language addressed directly to the user.
+${language === 'zh-TW'
+  ? '用「我替你點開了這個連結」作為開頭（或類似的自然句子）。說明頁面把用戶帶到了哪裡、頁面上要求用戶做什麼。如果頁面 404，解釋這可能代表詐騙內容已被檢舉下架或連結本身是假的。如果被 bot 保護攔截，說明這對於正規網站來說是不尋常的。用一般人能理解的語言，不要用技術術語。'
+  : language === 'vi'
+  ? 'Bắt đầu bằng "Tôi đã mở liên kết này cho bạn..." hoặc tương tự. Mô tả trang đã dẫn người dùng đến đâu và yêu cầu gì. Nếu trang 404, giải thích ý nghĩa. Viết bằng ngôn ngữ bình thường, không dùng thuật ngữ kỹ thuật.'
+  : 'Start with "I opened this link for you..." or similar. Describe where the page took the user and what it asked them to do. If the page was 404, explain that this may mean the scam content was taken down or the link was fake. If blocked by bot protection, note that this is unusual for legitimate sites. Write in plain everyday language, no technical jargon.'}
+`
+        : '';
+
+      const cnFieldInstruction = `
+CONCLUSION FIELD ("cn"):
+Write 2-3 sentences that serve as the main verdict shown to the user. Incorporate both search findings AND agent observations. Be direct and specific — tell the user exactly what this is and what they should do. Avoid vague hedging. Use the same natural tone as the agent narrative.
+`;
 
       // Common scam detection instructions
       const scamDetectionInstructions = `
@@ -1505,6 +1565,9 @@ SCORING:
 - If PRE-CHECKS show VirusTotal "⚠️ SUSPICIOUS", scamProbability MUST be ≥ 60.
 - If PRE-CHECKS show VirusTotal "✅ CLEAN" with 0 detections across many engines, this is strong evidence of safety — weight accordingly.
 
+${agFieldInstruction}
+${cnFieldInstruction}
+
 OUTPUT JSON ONLY:
 {
   "d": "Website/Service Name",
@@ -1513,6 +1576,8 @@ OUTPUT JSON ONLY:
   "ts": Trust Score (0-100),
   "sp": Scam Probability (0-100),
   "v": "One sentence verdict about this URL's safety",
+  "cn": "2-3 sentence conclusion incorporating search findings and agent observations",
+  "ag": "2-3 sentence plain language description of what the agent observed (empty string if agent did not run)",
   "eq": 0-3 (0=Legitimate, 1=Questionable, 2=Suspicious, 3=Malicious),
   "c": ["Reasons this might be legitimate"],
   "r": ["Warning signs and risks"],
@@ -1545,6 +1610,8 @@ SCORING:
 - trustScore: 0(Confirmed Scam)-100(Legitimate). <20: Confirmed Scam Number. 20-40: High Risk. 40-60: Unverified/Unknown. 60-80: No reports found. >80: Verified Legitimate.
 - scamProbability: Only elevate if reports exist. No reports found = scamProbability 10-30, not 50+.
 
+${cnFieldInstruction}
+
 OUTPUT JSON ONLY:
 {
   "d": "Caller/Organization Name (if identifiable, else 'Unknown')",
@@ -1553,6 +1620,8 @@ OUTPUT JSON ONLY:
   "ts": Trust Score (0-100),
   "sp": Scam Probability (0-100),
   "v": "One sentence verdict about this phone number",
+  "cn": "2-3 sentence conclusion about this phone number, incorporating all search findings",
+  "ag": "",
   "eq": 0-3 (0=Legitimate, 1=Questionable, 2=Suspicious, 3=Known Scam),
   "c": ["Reasons this might be legitimate"],
   "r": ["Warning signs and risk factors"],
@@ -1589,6 +1658,9 @@ SCORING:
 - trustScore: 0(Scam)-100(Legitimate). <20: Confirmed Scam. 20-40: High Risk. 40-60: Suspicious. 60-80: Probably Fine. >80: Normal Message.
 - scamProbability: Must be grounded in what is literally written. Ambiguous or neutral messages = 10-30. Only 70+ if multiple explicit scam signals are present.
 
+${agFieldInstruction}
+${cnFieldInstruction}
+
 OUTPUT JSON ONLY:
 {
   "d": "Sender/Source (if identifiable)",
@@ -1597,6 +1669,8 @@ OUTPUT JSON ONLY:
   "ts": Trust Score (0-100),
   "sp": Scam Probability (0-100),
   "v": "One sentence verdict - is this message safe?",
+  "cn": "2-3 sentence conclusion incorporating message analysis and any agent URL observations",
+  "ag": "2-3 sentence plain language agent observation narrative (empty string if no URL was checked)",
   "eq": 0-3 (0=Normal, 1=Questionable, 2=Suspicious, 3=Scam Pattern),
   "c": ["Reasons this might be legitimate"],
   "r": ["Warning signs found in message"],
@@ -1654,6 +1728,7 @@ OUTPUT JSON ONLY:
       identityStatus: IDENTITY_MAP[minData.s] || "UNKNOWN_ENTITY",
       trustScore: minData.ts ?? 50,
       verdict: minData.v || "Insufficient data",
+      agentNarrativeDescription: minData.ag || '',
       engagementQuality: ENGAGEMENT_MAP[minData.eq] || "MIXED",
       credibilityStrengths: minData.c || [],
       riskFactors: minData.r || [],
@@ -1690,7 +1765,10 @@ OUTPUT JSON ONLY:
     fullData.primaryActions = buildPrimaryActions(fullData.officialRoute, language);
     fullData.likelyLosses = buildLikelyLosses(fullData.scamProbability, fullData.riskSignals, agentVerification, language);
     fullData.trustSummary = buildTrustSummary(agentVerification, fullData.officialRoute, fullData.riskSignals);
-    fullData.conclusion = deriveConclusion(fullData.verdict, fullData.finalVerdict, agentVerification, normalizedInput, language);
+    // Prefer LLM-written conclusion (cn) over the hardcoded template
+    fullData.conclusion = (minData.cn && minData.cn.trim())
+      ? minData.cn.trim()
+      : deriveConclusion(fullData.verdict, fullData.finalVerdict, agentVerification, normalizedInput, language);
 
     // === HIGH-TRUST SIGNAL FILTER (URL only) ===
     // For well-established URLs (trustScore > 80), suppress generic risk factors and
