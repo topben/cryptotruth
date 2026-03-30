@@ -110,12 +110,6 @@ const SCENARIO_CHIPS: Array<{
     sample: 'https://bit.ly/tw-sale-event',
   },
   {
-    id: 'instagram_account',
-    icon: '📸',
-    label: { en: 'Instagram Account', 'zh-TW': 'Instagram 帳號', vi: 'Tài khoản Instagram' },
-    sample: '@brand.tw_service',
-  },
-  {
     id: 'phishing_sms',
     icon: '📩',
     label: { en: 'Phishing SMS', 'zh-TW': '釣魚簡訊', vi: 'SMS lừa đảo' },
