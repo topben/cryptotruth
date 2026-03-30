@@ -405,7 +405,23 @@ const setCachedAnalysis = async (handle: string, language: string, data: any) =>
 // FACT GATHERING — free external checks run before AI analysis
 // =============================================================================
 
-const FACT_FETCH_TIMEOUT_MS = 5000;
+const FACT_FETCH_TIMEOUT_MS = 5000;   // external API / DNS / RDAP calls
+const OBSERVE_FETCH_TIMEOUT_MS = 10000; // page fetching — allow more for slow infra
+
+// Realistic Chrome 125 browser headers — bypasses most CDN bot filters
+const BROWSER_HEADERS: Record<string, string> = {
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+  'accept': 'text/html,application/xhtml+xml,application/xhtml+xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+  'accept-encoding': 'gzip, deflate, br',
+  'cache-control': 'no-cache',
+  'pragma': 'no-cache',
+  'sec-fetch-dest': 'document',
+  'sec-fetch-mode': 'navigate',
+  'sec-fetch-site': 'none',
+  'sec-fetch-user': '?1',
+  'upgrade-insecure-requests': '1',
+};
 
 async function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
   const controller = new AbortController();
@@ -415,6 +431,65 @@ async function fetchWithTimeout(url: string, options?: RequestInit): Promise<Res
   } finally {
     clearTimeout(id);
   }
+}
+
+async function fetchPage(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), OBSERVE_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      redirect: 'manual',
+      headers: BROWSER_HEADERS,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+/** Resolve a Location header value against a base URL */
+function resolveRedirect(location: string, base: string): string | null {
+  try {
+    // Protocol-relative: //example.com/path
+    if (location.startsWith('//')) {
+      const scheme = new URL(base).protocol;
+      return new URL(scheme + location).toString();
+    }
+    return new URL(location, base).toString();
+  } catch {
+    return null;
+  }
+}
+
+/** Detect meta-refresh or JS redirect in HTML and return target URL */
+function extractSoftRedirect(html: string, base: string): string | null {
+  // <meta http-equiv="refresh" content="0; url=...">
+  const metaMatch = html.match(/<meta[^>]+http-equiv=["']?refresh["']?[^>]+content=["'][^;]*;\s*url=([^"'\s>]+)/i)
+    ?? html.match(/<meta[^>]+content=["'][^;]*;\s*url=([^"'\s>]+)[^>]*http-equiv=["']?refresh/i);
+  if (metaMatch) {
+    try { return new URL(metaMatch[1], base).toString(); } catch {}
+  }
+  // window.location.href = "...", window.location.replace(".."), location.href=
+  const jsMatch = html.match(/(?:window\.)?location(?:\.href)?\s*=\s*["']([^"']{10,}["'])/);
+  if (jsMatch) {
+    try { return new URL(jsMatch[1].replace(/["']$/, ''), base).toString(); } catch {}
+  }
+  return null;
+}
+
+/** Detect Cloudflare / generic anti-bot challenge pages */
+function isBotChallenge(html: string, status: number): boolean {
+  if (status === 403 || status === 429) return true;
+  const lower = html.slice(0, 4000).toLowerCase();
+  return (
+    lower.includes('cf-browser-verification') ||
+    lower.includes('checking your browser') ||
+    lower.includes('just a moment') ||
+    lower.includes('enable javascript and cookies') ||
+    lower.includes('ddos-guard') ||
+    lower.includes('ray id') ||
+    (status === 503 && lower.includes('cloudflare'))
+  );
 }
 
 // --- RDAP: domain registration info (no API key required) ---
@@ -849,64 +924,174 @@ const normalizeInput = (input: string, inputType: string) => {
 async function observeUrl(targetUrl: string): Promise<any> {
   const chain: string[] = [];
   let current = targetUrl;
+  const MAX_HOPS = 8; // more hops to handle multi-step redirect chains
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < MAX_HOPS; i++) {
+    if (chain.includes(current)) break; // loop detection
     chain.push(current);
-    const res = await fetchWithTimeout(current, {
-      redirect: 'manual',
-      headers: { 'user-agent': 'VerifyFirstBot/1.0 (+https://verify1st.tw)' },
-    });
-    const location = res.headers.get('location');
-    if (!location || !(res.status >= 300 && res.status < 400)) {
-      const html = (await res.text()).slice(0, 150000);
-      const pageTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim();
-      const bodyText = html
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 500);
-      const forms = [...html.matchAll(/<form[\s\S]*?<\/form>/gi)].slice(0, 3).map((m) => {
-        const form = m[0];
-        const fields = [
-          /password/i.test(form) && 'password',
-          /(otp|one.?time|驗證碼)/i.test(form) && 'otp',
-          /(credit.?card|cardnumber|cvv|付款|支付)/i.test(form) && 'payment',
-          /(email|帳號|username|login)/i.test(form) && 'login',
-        ].filter(Boolean);
-        return fields.length > 0 ? fields.join(', ') : 'generic form';
-      });
-      const ctaButtons = [...html.matchAll(/<(button|a)[^>]*>([\s\S]*?)<\/(button|a)>/gi)]
-        .map((m) => m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
-        .filter(Boolean)
-        .slice(0, 8);
 
+    let res: Response;
+    try {
+      res = await fetchPage(current);
+    } catch (err: any) {
+      // Network error or timeout — record and stop
+      const reason = err?.name === 'AbortError' ? 'timeout' : 'network_error';
       return {
         redirectChain: chain,
         finalLandingPage: current,
-        pageTitle,
-        visibleSummary: bodyText || undefined,
-        forms,
-        ctaButtons,
-        asksForLogin: /(登入|login|sign in|password|username|email)/i.test(html),
-        asksForOtp: /(otp|驗證碼|one.?time)/i.test(html),
-        asksForPayment: /(付款|支付|credit.?card|card number|gift card|crypto|wallet|bank transfer)/i.test(html),
-        asksForAppDownload: /(download app|下載 app|install app|apk)/i.test(html),
-        asksToAddChat: /(add line|加入 line|telegram|whatsapp|客服 line)/i.test(html),
-        detectedPattern: /(物流|delivery|shipping)/i.test(html) ? 'fake_logistics_candidate'
-          : /(客服|customer service)/i.test(html) ? 'fake_customer_service_candidate'
-          : /(投資|investment|profit|return)/i.test(html) ? 'fake_investment_candidate'
-          : undefined,
+        httpStatus: null,
+        pageStatus: reason,
+        forms: [],
+        ctaButtons: [],
+        asksForLogin: false,
+        asksForOtp: false,
+        asksForPayment: false,
+        asksForAppDownload: false,
+        asksToAddChat: false,
       };
     }
 
-    current = new URL(location, current).toString();
+    const status = res.status;
+
+    // Follow HTTP redirects (3xx)
+    if (status >= 300 && status < 400) {
+      const location = res.headers.get('location');
+      if (!location) break;
+      const next = resolveRedirect(location, current);
+      if (!next) break;
+      current = next;
+      continue;
+    }
+
+    // Read body (cap at 200KB to avoid memory issues)
+    const html = (await res.text()).slice(0, 200000);
+
+    // Detect bot challenge pages — record but don't parse as real content
+    if (isBotChallenge(html, status)) {
+      return {
+        redirectChain: chain,
+        finalLandingPage: current,
+        httpStatus: status,
+        pageStatus: 'bot_challenge',
+        forms: [],
+        ctaButtons: [],
+        asksForLogin: false,
+        asksForOtp: false,
+        asksForPayment: false,
+        asksForAppDownload: false,
+        asksToAddChat: false,
+      };
+    }
+
+    // 4xx / 5xx — record status and stop
+    if (status >= 400) {
+      return {
+        redirectChain: chain,
+        finalLandingPage: current,
+        httpStatus: status,
+        pageStatus: status === 404 ? 'not_found' : status === 403 ? 'forbidden' : 'server_error',
+        forms: [],
+        ctaButtons: [],
+        asksForLogin: false,
+        asksForOtp: false,
+        asksForPayment: false,
+        asksForAppDownload: false,
+        asksToAddChat: false,
+      };
+    }
+
+    // Follow soft redirects (meta-refresh, JS window.location)
+    const softNext = extractSoftRedirect(html, current);
+    if (softNext && !chain.includes(softNext)) {
+      current = softNext;
+      continue;
+    }
+
+    // === Arrived at final page — analyse content ===
+    const pageTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim();
+
+    const bodyText = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 600);
+
+    // Form field detection — look both in <form> blocks and loose <input> elements
+    const formBlocks = [...html.matchAll(/<form[\s\S]*?<\/form>/gi)].map(m => m[0]);
+    // Also capture stray inputs outside forms
+    const allInputs = html.match(/<input[^>]+>/gi)?.join(' ') ?? '';
+    const fullFormContext = formBlocks.join(' ') + ' ' + allInputs;
+
+    const formFields = [
+      /type=["']?password/i.test(fullFormContext) && 'password',
+      /(otp|one.?time|驗證碼|verification.?code)/i.test(fullFormContext) && 'otp',
+      /(credit.?card|cardnumber|cvv|付款|支付|card.?number)/i.test(fullFormContext) && 'payment',
+      /(email|帳號|username|login|sign.?in)/i.test(fullFormContext) && 'login',
+      /(id.?number|身分證|national.?id|passport)/i.test(fullFormContext) && 'id_document',
+      /(phone|mobile|手機|電話)/i.test(fullFormContext) && 'phone',
+    ].filter(Boolean);
+
+    const forms = formBlocks.slice(0, 3).map((form) => {
+      const fields = [
+        /type=["']?password/i.test(form) && 'password',
+        /(otp|one.?time|驗證碼)/i.test(form) && 'otp',
+        /(credit.?card|cardnumber|cvv|付款|支付)/i.test(form) && 'payment',
+        /(email|帳號|username|login)/i.test(form) && 'login',
+      ].filter(Boolean);
+      return fields.length > 0 ? fields.join(', ') : 'generic form';
+    });
+
+    // CTA buttons — deduplicated
+    const ctaButtons = [...new Set(
+      [...html.matchAll(/<(?:button|a)[^>]*>([\s\S]*?)<\/(?:button|a)>/gi)]
+        .map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(s => s.length > 1 && s.length < 80)
+    )].slice(0, 10);
+
+    // Signals — use both HTML and body text for broader coverage
+    const haystack = html + ' ' + bodyText;
+    const asksForLogin = /(登入|login|sign.?in|password|username|email.*required|帳號)/i.test(haystack)
+      && formFields.includes('login' as any);
+    const asksForOtp = /(otp|驗證碼|one.?time.?code|verification code)/i.test(haystack);
+    const asksForPayment = /(付款|支付|credit.?card|card number|gift.?card|crypto|wallet|bank.?transfer|轉帳|匯款)/i.test(haystack);
+    const asksForAppDownload = /(download.?app|下載.*app|install.*app|\.apk|apk.?download)/i.test(haystack);
+    const asksToAddChat = /(add line|加入 line|加 line|telegram\.me|t\.me\/|whatsapp\.com|line\.me|客服 line)/i.test(haystack);
+
+    const detectedPattern =
+      /(物流|delivery|shipping|包裹|快遞|order.*status|訂單)/i.test(haystack) ? 'fake_logistics_candidate'
+      : /(客服|customer.?service|support.*center|服務中心)/i.test(haystack) ? 'fake_customer_service_candidate'
+      : /(投資|investment|profit|return|獲利|報酬率|earn.*daily|passive.?income)/i.test(haystack) ? 'fake_investment_candidate'
+      : /(補貼|退款|refund.*government|financial.*assistance|申請補助)/i.test(haystack) ? 'fake_government_subsidy_candidate'
+      : /(中獎|winner|prize|恭喜.*獲得|you.*won)/i.test(haystack) ? 'prize_scam_candidate'
+      : undefined;
+
+    return {
+      redirectChain: chain,
+      finalLandingPage: current,
+      httpStatus: status,
+      pageStatus: 'observed',
+      pageTitle,
+      visibleSummary: bodyText || undefined,
+      forms,
+      formFields,
+      ctaButtons,
+      asksForLogin,
+      asksForOtp,
+      asksForPayment,
+      asksForAppDownload,
+      asksToAddChat,
+      detectedPattern,
+    };
   }
 
+  // Exceeded max hops without landing on a final page
   return {
     redirectChain: chain,
     finalLandingPage: current,
+    httpStatus: null,
+    pageStatus: 'redirect_loop_or_too_many_hops',
     forms: [],
     ctaButtons: [],
     asksForLogin: false,
@@ -937,17 +1122,41 @@ async function buildAgentVerification(normalizedInput: any, inputType: string): 
 
   try {
     const observed = await observeUrl(targetUrl);
+
+    // Map pageStatus to human-readable observation
+    const pageStatusObs: Record<string, { label: string; value: string; lane: string }> = {
+      not_found:                    { label: '頁面狀態', value: '404 頁面不存在', lane: 'OBSERVED' },
+      forbidden:                    { label: '頁面狀態', value: '403 存取被拒絕', lane: 'OBSERVED' },
+      server_error:                 { label: '頁面狀態', value: `HTTP ${observed.httpStatus} 伺服器錯誤`, lane: 'OBSERVED' },
+      bot_challenge:                { label: '頁面狀態', value: '反爬蟲保護（Cloudflare 等）', lane: 'OBSERVED' },
+      timeout:                      { label: '頁面狀態', value: '連線逾時', lane: 'UNVERIFIED' },
+      network_error:                { label: '頁面狀態', value: '無法連線', lane: 'UNVERIFIED' },
+      redirect_loop_or_too_many_hops: { label: '頁面狀態', value: '重定向過多或迴圈', lane: 'OBSERVED' },
+    };
+
     const riskObservations = [
-      observed.asksForLogin && { label: '要求登入', value: '是', lane: 'OBSERVED' },
-      observed.asksForOtp && { label: '要求 OTP', value: '是', lane: 'OBSERVED' },
+      observed.pageStatus && observed.pageStatus !== 'observed' && pageStatusObs[observed.pageStatus],
+      observed.redirectChain?.length > 1 && {
+        label: '重定向跳數',
+        value: `${observed.redirectChain.length} 跳（${observed.redirectChain[0]} → ${observed.finalLandingPage}）`,
+        lane: 'OBSERVED',
+      },
+      observed.asksForLogin  && { label: '要求登入', value: '是', lane: 'OBSERVED' },
+      observed.asksForOtp    && { label: '要求 OTP', value: '是', lane: 'OBSERVED' },
       observed.asksForPayment && { label: '要求付款', value: '是', lane: 'OBSERVED' },
       observed.asksForAppDownload && { label: '要求下載 App', value: '是', lane: 'OBSERVED' },
       observed.asksToAddChat && { label: '要求外部聊天', value: '是', lane: 'OBSERVED' },
       observed.detectedPattern && { label: '頁型判斷', value: observed.detectedPattern, lane: 'MODEL_INFERENCE' },
     ].filter(Boolean);
 
+    const agentStatus =
+      observed.pageStatus === 'observed' ? 'OBSERVED_URL'
+      : observed.pageStatus === 'bot_challenge' ? 'BOT_BLOCKED'
+      : observed.pageStatus === 'not_found' ? 'NOT_FOUND'
+      : 'LIMITED';
+
     return {
-      status: 'OBSERVED_URL',
+      status: agentStatus,
       originalUrl: targetUrl,
       ...observed,
       screenshots: [],
@@ -958,6 +1167,8 @@ async function buildAgentVerification(normalizedInput: any, inputType: string): 
       status: 'LIMITED',
       originalUrl: targetUrl,
       redirectChain: [targetUrl],
+      httpStatus: null,
+      pageStatus: 'network_error',
       forms: [],
       ctaButtons: [],
       asksForLogin: false,
