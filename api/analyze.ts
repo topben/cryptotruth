@@ -19,7 +19,7 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour window
 const MAX_REQUESTS_PER_WINDOW = 10; // Max 10 API calls per IP per hour
 const MAX_HANDLE_LENGTH = 50;
 const MAX_INPUT_LENGTH = 2000; // Max length for URL or SMS text
-const ALLOWED_LANGUAGES = ['en', 'zh-TW'];
+const ALLOWED_LANGUAGES = ['en', 'zh-TW', 'vi'];
 const ALLOWED_INPUT_TYPES = ['HANDLE', 'URL', 'SMS_TEXT', 'PHONE'];
 
 // Inflation Maps for minified schema
@@ -553,7 +553,23 @@ async function scamSnifferAddressCheck(address: string): Promise<{ status: 'BLOC
   return { status: db.addresses.has(address.toLowerCase()) ? 'BLOCKED' : 'PASSED' };
 }
 
-// --- VirusTotal: multi-engine domain reputation (free 500/day) ---
+// --- VirusTotal: multi-engine domain reputation (free 4 req/min, 500/day) ---
+// Module-level cache to avoid redundant calls across warm invocations
+const vtResultCache = new Map<string, { result: VTResult | null; cachedAt: number }>();
+const VT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Sliding-window rate limiter: max 3 calls/min (free tier is 4, keep 1 buffer)
+const vtCallTimestamps: number[] = [];
+const VT_MAX_PER_MINUTE = 3;
+
+function canCallVirusTotal(): boolean {
+  const now = Date.now();
+  while (vtCallTimestamps.length > 0 && vtCallTimestamps[0] < now - 60_000) {
+    vtCallTimestamps.shift();
+  }
+  return vtCallTimestamps.length < VT_MAX_PER_MINUTE;
+}
+
 interface VTResult {
   malicious: number;
   suspicious: number;
@@ -566,6 +582,17 @@ interface VTResult {
 async function virusTotalCheck(hostname: string): Promise<VTResult | null> {
   const key = process.env.VIRUSTOTAL_API_KEY;
   if (!key) return null;
+
+  // Return cached result if still fresh
+  const cached = vtResultCache.get(hostname);
+  if (cached && Date.now() - cached.cachedAt < VT_CACHE_TTL_MS) {
+    return cached.result;
+  }
+
+  // Skip if rate limit would be exceeded
+  if (!canCallVirusTotal()) return null;
+  vtCallTimestamps.push(Date.now());
+
   try {
     const res = await fetchWithTimeout(
       `https://www.virustotal.com/api/v3/domains/${encodeURIComponent(hostname)}`,
@@ -576,7 +603,7 @@ async function virusTotalCheck(hostname: string): Promise<VTResult | null> {
     const attrs = d.data?.attributes ?? {};
     const stats = attrs.last_analysis_stats ?? {};
     const cats: string[] = Object.values(attrs.categories ?? {}) as string[];
-    return {
+    const result: VTResult = {
       malicious: stats.malicious ?? 0,
       suspicious: stats.suspicious ?? 0,
       harmless: stats.harmless ?? 0,
@@ -584,6 +611,8 @@ async function virusTotalCheck(hostname: string): Promise<VTResult | null> {
       reputation: attrs.reputation ?? 0,
       categories: [...new Set(cats)].slice(0, 5),
     };
+    vtResultCache.set(hostname, { result, cachedAt: Date.now() });
+    return result;
   } catch {
     return null;
   }
@@ -773,6 +802,306 @@ async function buildSMSFactsSection(text: string): Promise<string> {
 
 // =============================================================================
 
+const guessPlatform = (value: string): string | undefined => {
+  const lower = value.toLowerCase();
+  if (lower.includes('line')) return 'LINE';
+  if (lower.includes('instagram') || lower.includes('instagr.am')) return 'Instagram';
+  if (lower.includes('facebook') || lower.includes('fb.')) return 'Facebook';
+  if (lower.includes('telegram') || lower.includes('t.me')) return 'Telegram';
+  if (lower.includes('shopee')) return 'Shopee';
+  return undefined;
+};
+
+const normalizeInput = (input: string, inputType: string) => {
+  const normalized: any = {};
+  if (inputType === 'URL') {
+    normalized.url = input;
+    try {
+      const url = new URL(input);
+      normalized.domain = url.hostname.replace(/^www\./, '');
+      normalized.platform = guessPlatform(input);
+    } catch {}
+    return normalized;
+  }
+
+  if (inputType === 'PHONE') {
+    normalized.phone = input;
+    return normalized;
+  }
+
+  if (inputType === 'HANDLE') {
+    normalized.handle = input.replace(/^@/, '');
+    normalized.platform = guessPlatform(input) || 'Instagram';
+    return normalized;
+  }
+
+  normalized.text = input;
+  normalized.platform = guessPlatform(input);
+  const urlMatch = input.match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/i);
+  if (urlMatch) {
+    normalized.url = urlMatch[0];
+    try {
+      normalized.domain = new URL(urlMatch[0]).hostname.replace(/^www\./, '');
+    } catch {}
+  }
+  const phoneMatch = input.match(/(?:\+886|886|0)[89]\d{8}|\+\d{8,14}/);
+  if (phoneMatch) normalized.phone = phoneMatch[0];
+  const handleMatch = input.match(/@([a-zA-Z0-9._]{2,50})/);
+  if (handleMatch) normalized.handle = handleMatch[1];
+  return normalized;
+};
+
+async function observeUrl(targetUrl: string): Promise<any> {
+  const chain: string[] = [];
+  let current = targetUrl;
+
+  for (let i = 0; i < 5; i++) {
+    chain.push(current);
+    const res = await fetchWithTimeout(current, {
+      redirect: 'manual',
+      headers: { 'user-agent': 'VerifyFirstBot/1.0 (+https://verify1st.tw)' },
+    });
+    const location = res.headers.get('location');
+    if (!location || !(res.status >= 300 && res.status < 400)) {
+      const html = (await res.text()).slice(0, 150000);
+      const pageTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim();
+      const bodyText = html
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+      const forms = [...html.matchAll(/<form[\s\S]*?<\/form>/gi)].slice(0, 3).map((m) => {
+        const form = m[0];
+        const fields = [
+          /password/i.test(form) && 'password',
+          /(otp|one.?time|驗證碼)/i.test(form) && 'otp',
+          /(credit.?card|cardnumber|cvv|付款|支付)/i.test(form) && 'payment',
+          /(email|帳號|username|login)/i.test(form) && 'login',
+        ].filter(Boolean);
+        return fields.length > 0 ? fields.join(', ') : 'generic form';
+      });
+      const ctaButtons = [...html.matchAll(/<(button|a)[^>]*>([\s\S]*?)<\/(button|a)>/gi)]
+        .map((m) => m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .slice(0, 8);
+
+      return {
+        redirectChain: chain,
+        finalLandingPage: current,
+        pageTitle,
+        visibleSummary: bodyText || undefined,
+        forms,
+        ctaButtons,
+        asksForLogin: /(登入|login|sign in|password|username|email)/i.test(html),
+        asksForOtp: /(otp|驗證碼|one.?time)/i.test(html),
+        asksForPayment: /(付款|支付|credit.?card|card number|gift card|crypto|wallet|bank transfer)/i.test(html),
+        asksForAppDownload: /(download app|下載 app|install app|apk)/i.test(html),
+        asksToAddChat: /(add line|加入 line|telegram|whatsapp|客服 line)/i.test(html),
+        detectedPattern: /(物流|delivery|shipping)/i.test(html) ? 'fake_logistics_candidate'
+          : /(客服|customer service)/i.test(html) ? 'fake_customer_service_candidate'
+          : /(投資|investment|profit|return)/i.test(html) ? 'fake_investment_candidate'
+          : undefined,
+      };
+    }
+
+    current = new URL(location, current).toString();
+  }
+
+  return {
+    redirectChain: chain,
+    finalLandingPage: current,
+    forms: [],
+    ctaButtons: [],
+    asksForLogin: false,
+    asksForOtp: false,
+    asksForPayment: false,
+    asksForAppDownload: false,
+    asksToAddChat: false,
+  };
+}
+
+async function buildAgentVerification(normalizedInput: any, inputType: string): Promise<any> {
+  const targetUrl = normalizedInput.url;
+  if (!targetUrl) {
+    return {
+      status: inputType === 'HANDLE' ? 'LIMITED' : 'NOT_RUN',
+      redirectChain: [],
+      forms: [],
+      ctaButtons: [],
+      asksForLogin: false,
+      asksForOtp: false,
+      asksForPayment: false,
+      asksForAppDownload: false,
+      asksToAddChat: false,
+      screenshots: [],
+      riskObservations: [],
+    };
+  }
+
+  try {
+    const observed = await observeUrl(targetUrl);
+    const riskObservations = [
+      observed.asksForLogin && { label: '要求登入', value: '是', lane: 'OBSERVED' },
+      observed.asksForOtp && { label: '要求 OTP', value: '是', lane: 'OBSERVED' },
+      observed.asksForPayment && { label: '要求付款', value: '是', lane: 'OBSERVED' },
+      observed.asksForAppDownload && { label: '要求下載 App', value: '是', lane: 'OBSERVED' },
+      observed.asksToAddChat && { label: '要求外部聊天', value: '是', lane: 'OBSERVED' },
+      observed.detectedPattern && { label: '頁型判斷', value: observed.detectedPattern, lane: 'MODEL_INFERENCE' },
+    ].filter(Boolean);
+
+    return {
+      status: inputType === 'HANDLE' ? 'OBSERVED_PROFILE' : 'OBSERVED_URL',
+      originalUrl: targetUrl,
+      ...observed,
+      screenshots: [],
+      riskObservations,
+    };
+  } catch {
+    return {
+      status: 'LIMITED',
+      originalUrl: targetUrl,
+      redirectChain: [targetUrl],
+      forms: [],
+      ctaButtons: [],
+      asksForLogin: false,
+      asksForOtp: false,
+      asksForPayment: false,
+      asksForAppDownload: false,
+      asksToAddChat: false,
+      screenshots: [],
+      riskObservations: [{ label: 'Agent', value: '無法完整觀察頁面', lane: 'UNVERIFIED' }],
+    };
+  }
+}
+
+function deriveFinalVerdict(scamProbability: number): 'A_MARKETING' | 'B_RISKY_MARKETING' | 'C_SUSPICIOUS_NEEDS_VERIFICATION' | 'D_HIGH_RISK_SCAM' {
+  if (scamProbability >= 75) return 'D_HIGH_RISK_SCAM';
+  if (scamProbability >= 45) return 'C_SUSPICIOUS_NEEDS_VERIFICATION';
+  if (scamProbability >= 20) return 'B_RISKY_MARKETING';
+  return 'A_MARKETING';
+}
+
+function deriveConclusion(verdict: string, finalVerdict: string, agentVerification: any, normalizedInput: any, language: string): string {
+  if (language !== 'zh-TW') return verdict;
+  if (finalVerdict === 'D_HIGH_RISK_SCAM') {
+    if (agentVerification.asksForLogin || agentVerification.asksForPayment || agentVerification.asksForOtp) {
+      return `這不是一般通知。我替你打開後，它會把你帶去要求${agentVerification.asksForPayment ? '付款' : agentVerification.asksForOtp ? '驗證碼' : '登入'}的頁面，建議先不要繼續。`;
+    }
+    return '這個內容的風險很高，先不要照著做，改走官方入口或直接回報比較安全。';
+  }
+  if (finalVerdict === 'C_SUSPICIOUS_NEEDS_VERIFICATION') {
+    return '這個內容有幾個不太對勁的地方，我先幫你整理出風險與官方替代入口，建議先不要直接照做。';
+  }
+  if (finalVerdict === 'B_RISKY_MARKETING') {
+    return '這比較像高壓促銷，不一定已能直接判成詐騙，但它在催你快點做決定，先改走正規入口比較穩。';
+  }
+  if (normalizedInput.url) {
+    return '目前看起來比較像一般行銷或正常入口，但你還是應該從官方入口進，而不是直接照貼文或轉傳連結操作。';
+  }
+  return '目前看起來比較像一般訊息，沒有看到足以直接升高風險的明確證據。';
+}
+
+function deriveOfficialRoute(normalizedInput: any, identityStatus: string, trustScore: number, agentVerification: any, language: string): any {
+  const zh = language === 'zh-TW';
+  if (normalizedInput.url) {
+    try {
+      const parsed = new URL(normalizedInput.url);
+      const hostname = parsed.hostname.replace(/^www\./, '');
+      const isTrusted = trustScore >= 80 || identityStatus === 'OFFICIAL_PROJECT';
+      return isTrusted ? {
+        status: 'OFFICIAL_CONFIRMED',
+        label: hostname,
+        url: `${parsed.protocol}//${hostname}`,
+        rationale: zh ? '目前可直接確認這是高可信的官方入口，可改走這個入口重新操作。' : 'This appears to be the official route.',
+        lane: 'CORROBORATED',
+      } : trustScore >= 55 ? {
+        status: 'OFFICIAL_CANDIDATE',
+        label: hostname,
+        url: `${parsed.protocol}//${hostname}`,
+        rationale: zh ? '目前只能確認它是高可信候選，不建議把它當成最強 CTA 直接相信。' : 'This is a high-confidence candidate.',
+        lane: 'MODEL_INFERENCE',
+      } : {
+        status: 'OFFICIAL_UNKNOWN',
+        label: zh ? '暫時無法確認官方入口' : 'Official route unknown',
+        rationale: zh ? '目前無法高可信確認官方入口，先不要照這個內容繼續。' : 'Could not confidently confirm an official route.',
+        lane: 'UNVERIFIED',
+      };
+    } catch {}
+  }
+
+  if (agentVerification.finalLandingPage && trustScore >= 70) {
+    return {
+      status: 'OFFICIAL_CANDIDATE',
+      label: agentVerification.finalLandingPage,
+      url: agentVerification.finalLandingPage,
+      rationale: zh ? '這是目前最可能的正規入口候選，但仍建議再核對一次。' : 'Most likely official candidate.',
+      lane: 'MODEL_INFERENCE',
+    };
+  }
+
+  return {
+    status: 'OFFICIAL_UNKNOWN',
+    label: zh ? '暫時無法確認官方入口' : 'Official route unknown',
+    rationale: zh ? '這次查核沒有足夠高可信資料可直接提供官方入口。' : 'Not enough high-confidence data.',
+    lane: 'UNVERIFIED',
+  };
+}
+
+function buildPrimaryActions(officialRoute: any, language: string): any[] {
+  const zh = language === 'zh-TW';
+  return [
+    {
+      label: zh ? '改走正確官方入口' : 'Go to the correct official entry',
+      actionUrl: officialRoute.url,
+      kind: 'OFFICIAL_ROUTE',
+      emphasis: officialRoute.status === 'OFFICIAL_UNKNOWN' ? 'disabled' : 'primary',
+      description: officialRoute.rationale,
+    },
+    {
+      label: zh ? '立即回報這則可疑內容' : 'Report this suspicious content now',
+      actionUrl: 'https://165.npa.gov.tw/',
+      kind: 'REPORT',
+      emphasis: 'secondary',
+      description: zh ? '帶著這次整理好的證據包，直接向 165 或平台檢舉。' : 'Use the evidence pack when reporting.',
+    },
+  ];
+}
+
+function buildLikelyLosses(scamProbability: number, riskSignals: any[], agentVerification: any, language: string): any[] {
+  if (scamProbability < 35) return [];
+  const zh = language === 'zh-TW';
+  const losses = [
+    {
+      title: zh ? '金錢損失' : 'Financial loss',
+      description: zh ? '如果下一步要求付款、匯款、刷卡或轉幣，這是最直接的風險。' : 'Payment requests create direct financial risk.',
+      severity: agentVerification.asksForPayment ? 'HIGH' : 'MEDIUM',
+    },
+    {
+      title: zh ? '帳號被盜' : 'Account takeover',
+      description: zh ? '只要頁面要求登入或 OTP，就有帳號被接管的可能。' : 'Login or OTP requests increase account takeover risk.',
+      severity: (agentVerification.asksForLogin || agentVerification.asksForOtp) ? 'HIGH' : 'LOW',
+    },
+    {
+      title: zh ? '個資外流' : 'Identity exposure',
+      description: zh ? '假客服、假物流與假活動頁常會先蒐集姓名、電話、地址與卡號。' : 'Fake service pages often collect personal data first.',
+      severity: riskSignals.some((s: any) => s.type === 'IMPERSONATION' || s.type === 'PHISHING_URL') ? 'HIGH' : 'MEDIUM',
+    },
+  ];
+  return losses;
+}
+
+function buildTrustSummary(agentVerification: any, officialRoute: any, riskSignals: any[]): any[] {
+  return [
+    agentVerification.originalUrl && { label: 'Agent 觀察', value: '已檢查頁面流程', lane: 'OBSERVED' },
+    officialRoute.status !== 'OFFICIAL_UNKNOWN' && { label: '官方入口', value: officialRoute.status, lane: officialRoute.lane },
+    riskSignals.length > 0 && { label: '風險訊號', value: `${riskSignals.length} 個`, lane: 'MODEL_INFERENCE' },
+  ].filter(Boolean);
+}
+
+// =============================================================================
+
 export default async function handler(req: any, res: any) {
   // Only allow POST
   if (req.method !== 'POST') {
@@ -844,7 +1173,32 @@ export default async function handler(req: any, res: any) {
           suggestedActions: cached.data.suggestedActions || [],
           inputType: cached.data.inputType || detectedType,
           originalInput: cached.data.originalInput || sanitizedInput,
-          scamProbability: cached.data.scamProbability ?? cached.data.trustScore ? (100 - cached.data.trustScore) : 50,
+          scamProbability: cached.data.scamProbability ?? (cached.data.trustScore != null ? (100 - cached.data.trustScore) : 50),
+          normalizedInput: cached.data.normalizedInput || normalizeInput(sanitizedInput, detectedType),
+          finalVerdict: cached.data.finalVerdict || deriveFinalVerdict(cached.data.scamProbability ?? (100 - (cached.data.trustScore ?? 50))),
+          conclusion: cached.data.conclusion || cached.data.verdict || sanitizedInput,
+          agentVerification: cached.data.agentVerification || {
+            status: 'NOT_RUN',
+            redirectChain: [],
+            forms: [],
+            ctaButtons: [],
+            asksForLogin: false,
+            asksForOtp: false,
+            asksForPayment: false,
+            asksForAppDownload: false,
+            asksToAddChat: false,
+            screenshots: [],
+            riskObservations: [],
+          },
+          officialRoute: cached.data.officialRoute || {
+            status: 'OFFICIAL_UNKNOWN',
+            label: '',
+            rationale: '',
+            lane: 'UNVERIFIED',
+          },
+          primaryActions: cached.data.primaryActions || [],
+          likelyLosses: cached.data.likelyLosses || [],
+          trustSummary: cached.data.trustSummary || [],
         };
         // Remove deprecated fields from old cache
         delete normalizedCache.totalWins;
@@ -876,6 +1230,8 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    const normalizedInput = normalizeInput(sanitizedInput, detectedType);
+
     // === GATHER OBJECTIVE FACTS (parallel, before AI call) ===
     let factsSection = '';
     if (detectedType === 'URL') {
@@ -885,6 +1241,8 @@ export default async function handler(req: any, res: any) {
     } else if (detectedType === 'SMS_TEXT') {
       factsSection = await buildSMSFactsSection(sanitizedInput);
     }
+
+    const agentVerification = await buildAgentVerification(normalizedInput, detectedType);
 
     // === CALL GEMINI API ===
     const ai = new GoogleGenAI({ apiKey });
@@ -1143,10 +1501,12 @@ OUTPUT JSON ONLY:
       // === TruthGuard AI New Fields ===
       inputType: detectedType,
       originalInput: sanitizedInput,
+      normalizedInput,
       scamProbability,
       riskSignals,
       suggestedActions,
       seniorModeVerdict: generateSeniorVerdict(scamProbability, language),
+      agentVerification,
 
       // UI flow compatibility fields
       searchQueries: searchQueries.length > 0 ? searchQueries : undefined,
@@ -1154,6 +1514,13 @@ OUTPUT JSON ONLY:
       lastAnalyzed: new Date().toISOString(),
       followersCount: undefined // Explicitly undefined to respect types
     };
+
+    fullData.finalVerdict = deriveFinalVerdict(fullData.scamProbability);
+    fullData.officialRoute = deriveOfficialRoute(normalizedInput, fullData.identityStatus, fullData.trustScore, agentVerification, language);
+    fullData.primaryActions = buildPrimaryActions(fullData.officialRoute, language);
+    fullData.likelyLosses = buildLikelyLosses(fullData.scamProbability, fullData.riskSignals, agentVerification, language);
+    fullData.trustSummary = buildTrustSummary(agentVerification, fullData.officialRoute, fullData.riskSignals);
+    fullData.conclusion = deriveConclusion(fullData.verdict, fullData.finalVerdict, agentVerification, normalizedInput, language);
 
     // === HIGH-TRUST SIGNAL FILTER (URL only) ===
     // For well-established URLs (trustScore > 80), suppress generic risk factors and
@@ -1224,6 +1591,11 @@ OUTPUT JSON ONLY:
         language === 'zh-TW'
           ? '需要更多公開資訊才能進行風險評估。'
           : 'Needs more public information before a fair risk assessment is possible.';
+      fullData.finalVerdict = 'C_SUSPICIOUS_NEEDS_VERIFICATION';
+      fullData.conclusion =
+        language === 'zh-TW'
+          ? '我先替你記下來了，但目前公開資訊不足，還不能把它當成安全內容或官方入口。'
+          : 'Saved for review, but there is not enough public information yet to call this safe or official.';
 
       fullData.history = [
         {

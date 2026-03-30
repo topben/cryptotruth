@@ -1,9 +1,10 @@
 import React from 'react';
 import { Banknote, UserX, LockOpen, HeartCrack } from 'lucide-react';
-import { Language } from '../types';
+import { Language, LikelyLoss } from '../types';
 
 interface LossRiskPanelProps {
   scamProbability: number;
+  likelyLosses?: LikelyLoss[];
   language?: Language;
   isSeniorMode?: boolean;
 }
@@ -107,12 +108,24 @@ const ICONS: Record<string, React.ReactNode> = {
 
 const LossRiskPanel: React.FC<LossRiskPanelProps> = ({
   scamProbability,
+  likelyLosses = [],
   language = 'en',
   isSeniorMode = false,
 }) => {
   if (scamProbability < 40) return null;
 
   const t = TRANSLATIONS[language as keyof typeof TRANSLATIONS] ?? TRANSLATIONS.en;
+  const categories = likelyLosses.length > 0
+    ? likelyLosses.map((item) => ({
+        icon: item.title.toLowerCase().includes('帳號') || item.title.toLowerCase().includes('account') ? 'account'
+          : item.title.toLowerCase().includes('個資') || item.title.toLowerCase().includes('identity') ? 'identity'
+          : item.title.toLowerCase().includes('心理') || item.title.toLowerCase().includes('emotion') ? 'emotional'
+          : 'money',
+        label: item.title,
+        desc: item.description,
+        level: item.severity,
+      }))
+    : t.categories;
 
   return (
     <div className={`${isSeniorMode ? 'mb-8' : 'mb-6'}`}>
@@ -120,7 +133,7 @@ const LossRiskPanel: React.FC<LossRiskPanelProps> = ({
         ⚠️ {t.title}
       </h3>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {t.categories.map((cat) => (
+        {categories.map((cat) => (
           <div
             key={cat.icon}
             className={`rounded-xl border p-4 ${

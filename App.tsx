@@ -14,6 +14,9 @@ import ScamScriptBreakdown from './components/ScamScriptBreakdown';
 import RescueMode from './components/RescueMode';
 import OfficialVerification from './components/OfficialVerification';
 import EvidencePack from './components/EvidencePack';
+import VerdictSummary from './components/VerdictSummary';
+import PrimaryActions from './components/PrimaryActions';
+import AgentFindings from './components/AgentFindings';
 import { ShieldAlert, Search, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, Eye, ChevronDown } from 'lucide-react';
 
 // UI Text dictionary for all static text
@@ -29,9 +32,9 @@ const UI_TEXT = {
     hero: {
       title: 'Verify First,',
       titleHighlight: 'Trust Later',
-      subtitle: 'AI Scam Detection · Risk Analysis · Safety Guide',
-      description: 'Paste a suspicious message or link — or upload a screenshot. AI breaks down the scam tactics and tells you exactly what to do next.',
-      descriptionSenior: 'Got a suspicious message? Paste it here and we\'ll tell you if it\'s safe!'
+      subtitle: 'First-step safety verification engine',
+      description: 'Paste suspicious content here. We verify where it leads, what it asks you to do, what the risk is, and what the safest next step should be.',
+      descriptionSenior: 'Paste the suspicious message, ad, short link, phone number, or account here first.'
     },
     loading: {
       messages: [
@@ -106,9 +109,9 @@ const UI_TEXT = {
     hero: {
       title: '先驗證，',
       titleHighlight: '再相信',
-      subtitle: 'AI 詐騙偵測 · 風險分析 · 防詐指南',
-      description: '貼上可疑訊息或網址，或上傳截圖，AI 幫你拆解詐騙手法，告訴你原因與下一步行動。',
-      descriptionSenior: '收到可疑訊息？貼上來讓我們幫您檢查是否安全！'
+      subtitle: '第一步安全驗證引擎',
+      description: '把可疑內容貼進來，我們先幫你安全走一遍，告訴你它會把你帶去哪裡、用了什麼手法、風險是什麼、正規入口在哪裡、現在最安全的下一步是什麼。',
+      descriptionSenior: '把可疑訊息、廣告、短網址、電話或帳號先貼進來，我們先幫你驗證。'
     },
     loading: {
       messages: [
@@ -183,9 +186,9 @@ const UI_TEXT = {
     hero: {
       title: 'Xác minh trước,',
       titleHighlight: 'Tin tưởng sau',
-      subtitle: 'Phát hiện lừa đảo AI · Phân tích rủi ro · Hướng dẫn an toàn',
-      description: 'Dán tin nhắn hoặc liên kết đáng ngờ — hoặc tải lên ảnh chụp màn hình. AI phân tích thủ thuật lừa đảo và cho bạn biết cần làm gì tiếp theo.',
-      descriptionSenior: 'Nhận được tin nhắn đáng ngờ? Dán vào đây và chúng tôi sẽ kiểm tra xem có an toàn không!'
+      subtitle: 'Công cụ xác minh an toàn bước đầu',
+      description: 'Dán nội dung đáng ngờ vào đây. Hệ thống sẽ kiểm tra nó dẫn bạn đi đâu, dùng thủ thuật gì, rủi ro là gì và bước tiếp theo an toàn nhất.',
+      descriptionSenior: 'Dán tin nhắn, quảng cáo, liên kết ngắn, số điện thoại hoặc tài khoản đáng ngờ vào đây trước.'
     },
     loading: {
       messages: [
@@ -553,8 +556,18 @@ const App: React.FC = () => {
         {/* Results View */}
         {analysis && loadingState === 'COMPLETED' && (
           <div className="animate-fade-in-up max-w-3xl mx-auto">
+            <VerdictSummary
+              conclusion={analysis.conclusion}
+              verdict={analysis.finalVerdict}
+              language={language}
+            />
 
-            {/* ── 1. Risk verdict + stop-the-flow intervention block ── */}
+            <PrimaryActions
+              actions={analysis.primaryActions}
+              officialRoute={analysis.officialRoute}
+              language={language}
+            />
+
             <InterruptWarning
               scamProbability={analysis.scamProbability}
               verdict={analysis.verdict}
@@ -564,68 +577,52 @@ const App: React.FC = () => {
               signals={analysis.riskSignals ?? []}
             />
 
-            {/* ── 2. 3-layer CTA — specific action buttons from AI ── */}
-            {analysis.suggestedActions && analysis.suggestedActions.length > 0 && (
-              <ActionGuidance
-                actions={analysis.suggestedActions}
-                scamProbability={analysis.scamProbability}
-                language={language}
-                isSeniorMode={isSeniorMode}
-              />
-            )}
+            <AgentFindings
+              agent={analysis.agentVerification}
+              language={language}
+            />
 
-            {/* ── 3–9: Full detail (hidden in senior mode for simplicity) ── */}
-            {!isSeniorMode && (
+            <LossRiskPanel
+              scamProbability={analysis.scamProbability}
+              likelyLosses={analysis.likelyLosses}
+              language={language}
+              isSeniorMode={isSeniorMode}
+            />
+
+            {!isSeniorMode && analysis.riskSignals && analysis.riskSignals.length > 0 && (
               <>
-                <LossRiskPanel
-                  scamProbability={analysis.scamProbability}
+                <TacticCards
+                  signals={analysis.riskSignals}
                   language={language}
                   isSeniorMode={false}
                 />
 
-                {analysis.riskSignals && analysis.riskSignals.length > 0 && (
-                  <TacticCards
-                    signals={analysis.riskSignals}
-                    language={language}
-                    isSeniorMode={false}
-                  />
-                )}
+                <RiskSignals
+                  signals={analysis.riskSignals}
+                  language={language}
+                  isSeniorMode={false}
+                />
 
-                {analysis.riskSignals && analysis.riskSignals.length > 0 && (
-                  <RiskSignals
-                    signals={analysis.riskSignals}
-                    language={language}
-                    isSeniorMode={false}
-                  />
-                )}
-
-                {analysis.riskSignals && analysis.riskSignals.length > 0 && (
-                  <ScamScriptBreakdown
-                    signals={analysis.riskSignals}
-                    scamProbability={analysis.scamProbability}
-                    language={language}
-                    isSeniorMode={false}
-                  />
-                )}
+                <ScamScriptBreakdown
+                  signals={analysis.riskSignals}
+                  scamProbability={analysis.scamProbability}
+                  language={language}
+                  isSeniorMode={false}
+                />
               </>
             )}
 
-            {/* ── Rescue mode — shown in both modes ── */}
             <RescueMode
               scamProbability={analysis.scamProbability}
               language={language}
               isSeniorMode={isSeniorMode}
             />
 
-            {/* ── Official verification + evidence pack (non-senior only) ── */}
             {!isSeniorMode && (
               <>
                 <OfficialVerification
-                  originalInput={analysis.originalInput}
-                  inputType={analysis.inputType}
-                  scamProbability={analysis.scamProbability}
+                  officialRoute={analysis.officialRoute}
                   language={language}
-                  isSeniorMode={false}
                 />
 
                 <EvidencePack
@@ -644,6 +641,15 @@ const App: React.FC = () => {
                   </div>
                 )}
               </>
+            )}
+
+            {analysis.suggestedActions && analysis.suggestedActions.length > 0 && !isSeniorMode && (
+              <ActionGuidance
+                actions={analysis.suggestedActions}
+                scamProbability={analysis.scamProbability}
+                language={language}
+                isSeniorMode={isSeniorMode}
+              />
             )}
 
             {/* ── Below the fold: analysis detail + trust meter (non-senior) ── */}
