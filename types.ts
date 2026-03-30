@@ -72,7 +72,75 @@ export type Language = 'en' | 'zh-TW' | 'vi';
 // ========== TruthGuard AI Types (Hackathon Modules) ==========
 
 // Input type for flexible analysis (Module A)
-export type InputType = 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE' | 'IMAGE';
+export type InputType = 'URL' | 'SMS_TEXT' | 'PHONE' | 'IMAGE';
+
+export type FinalVerdict =
+  | 'A_MARKETING'
+  | 'B_RISKY_MARKETING'
+  | 'C_SUSPICIOUS_NEEDS_VERIFICATION'
+  | 'D_HIGH_RISK_SCAM';
+
+export type TrustLane = 'OBSERVED' | 'CORROBORATED' | 'MODEL_INFERENCE' | 'UNVERIFIED';
+
+export interface NormalizedInput {
+  text?: string;
+  url?: string;
+  domain?: string;
+  phone?: string;
+  platform?: string;
+  handle?: string;
+  profileUrl?: string;
+  screenshot?: boolean;
+  screenshotOcrText?: string;
+  userNote?: string;
+}
+
+export interface TrustTaggedValue {
+  label: string;
+  value: string;
+  lane: TrustLane;
+}
+
+export interface AgentVerification {
+  status: 'NOT_RUN' | 'OBSERVED_URL' | 'OBSERVED_PROFILE' | 'LIMITED';
+  originalUrl?: string;
+  redirectChain: string[];
+  finalLandingPage?: string;
+  pageTitle?: string;
+  visibleSummary?: string;
+  forms: string[];
+  ctaButtons: string[];
+  asksForLogin: boolean;
+  asksForOtp: boolean;
+  asksForPayment: boolean;
+  asksForAppDownload: boolean;
+  asksToAddChat: boolean;
+  detectedPattern?: string;
+  screenshots: string[];
+  riskObservations: TrustTaggedValue[];
+}
+
+export interface OfficialRouteResolution {
+  status: 'OFFICIAL_CONFIRMED' | 'OFFICIAL_CANDIDATE' | 'OFFICIAL_UNKNOWN';
+  label: string;
+  url?: string;
+  rationale: string;
+  lane: TrustLane;
+}
+
+export interface PrimaryAction {
+  label: string;
+  actionUrl?: string;
+  kind: 'OFFICIAL_ROUTE' | 'REPORT' | 'HOTLINE' | 'GUIDANCE';
+  emphasis: 'primary' | 'secondary' | 'disabled';
+  description: string;
+}
+
+export interface LikelyLoss {
+  title: string;
+  description: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+}
 
 export interface AnalysisInput {
   type: InputType;
@@ -116,4 +184,13 @@ export interface TruthGuardAnalysis extends KOLAnalysis {
 
   // Quick verdict for senior mode
   seniorModeVerdict?: string;
+
+  finalVerdict: FinalVerdict;
+  conclusion: string;
+  normalizedInput: NormalizedInput;
+  primaryActions: PrimaryAction[];
+  agentVerification: AgentVerification;
+  officialRoute: OfficialRouteResolution;
+  likelyLosses: LikelyLoss[];
+  trustSummary: TrustTaggedValue[];
 }

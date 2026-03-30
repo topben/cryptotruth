@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Loader2, Link, MessageSquare, ImagePlus, FileText, X, ScanText } from 'lucide-react';
+import { Search, Loader2, Link, MessageSquare, ImagePlus, FileText, X, ScanText, AtSign, Phone } from 'lucide-react';
 import { Language, InputType } from '../types';
 import { createWorker } from 'tesseract.js';
 
-type InputMode = 'URL' | 'SMS_TEXT';
+type InputMode = 'URL' | 'SMS_TEXT' | 'PHONE' | 'HANDLE';
 
 interface SearchInputProps {
   onSearch: (input: string, inputType?: InputType, imageData?: { base64: string; mediaType: string }) => void;
@@ -15,7 +15,7 @@ interface SearchInputProps {
 const TRANSLATIONS = {
   en: {
     placeholder: 'Paste a suspicious link or message...',
-    placeholderSenior: 'Paste any suspicious link or message here...',
+    placeholderSenior: 'Paste a suspicious LINE message, ad, short link, phone number, or account here...',
     scanning: 'Scanning...',
     scanningSenior: 'Checking...',
     audit: 'Check',
@@ -23,9 +23,11 @@ const TRANSLATIONS = {
     detected: {
       URL: 'Link',
       SMS_TEXT: 'Message',
+      PHONE: 'Phone',
+      HANDLE: 'Account',
     },
     detectedLabel: 'Detected:',
-    scenarioHint: 'Common scam scenarios — click to try an example:',
+    scenarioHint: 'Taiwan Phase 1 examples — click to try one:',
     uploadImage: 'Upload Screenshot',
     uploadTxt: 'Upload .txt file',
     imageReady: 'Screenshot ready — click Check to analyze',
@@ -37,8 +39,8 @@ const TRANSLATIONS = {
     ocrFailed: 'Could not read text — please type it manually',
   },
   'zh-TW': {
-    placeholder: '貼上可疑網址或訊息...',
-    placeholderSenior: '把可疑的連結或訊息貼在這裡...',
+    placeholder: '貼上可疑訊息、廣告、短網址、電話或帳號...',
+    placeholderSenior: '把可疑的 LINE 訊息、廣告、短網址、電話或帳號貼在這裡...',
     scanning: '掃描中...',
     scanningSenior: '檢查中...',
     audit: '檢查',
@@ -46,9 +48,11 @@ const TRANSLATIONS = {
     detected: {
       URL: '網址',
       SMS_TEXT: '訊息',
+      PHONE: '電話',
+      HANDLE: '帳號',
     },
     detectedLabel: '偵測到：',
-    scenarioHint: '常見詐騙情境，點擊體驗範例：',
+    scenarioHint: '台灣 Phase 1 常見入口，點擊帶入範例：',
     uploadImage: '上傳截圖',
     uploadTxt: '上傳 .txt 文字檔',
     imageReady: '截圖已就緒，點擊「檢查」開始分析',
@@ -60,8 +64,8 @@ const TRANSLATIONS = {
     ocrFailed: '無法辨識文字，請手動輸入',
   },
   vi: {
-    placeholder: 'Dán liên kết hoặc tin nhắn đáng ngờ...',
-    placeholderSenior: 'Dán bất kỳ liên kết hoặc tin nhắn đáng ngờ vào đây...',
+    placeholder: 'Dán nội dung đáng ngờ, quảng cáo, liên kết ngắn, số điện thoại hoặc tài khoản...',
+    placeholderSenior: 'Dán tin nhắn LINE, quảng cáo, liên kết ngắn, số điện thoại hoặc tài khoản đáng ngờ vào đây...',
     scanning: 'Đang quét...',
     scanningSenior: 'Đang kiểm tra...',
     audit: 'Kiểm tra',
@@ -69,9 +73,11 @@ const TRANSLATIONS = {
     detected: {
       URL: 'Liên kết',
       SMS_TEXT: 'Tin nhắn',
+      PHONE: 'Số điện thoại',
+      HANDLE: 'Tài khoản',
     },
     detectedLabel: 'Phát hiện:',
-    scenarioHint: 'Các tình huống lừa đảo phổ biến — nhấn để thử ví dụ:',
+    scenarioHint: 'Các tình huống Phase 1 tại Đài Loan — nhấn để thử ví dụ:',
     uploadImage: 'Tải ảnh chụp màn hình',
     uploadTxt: 'Tải file .txt',
     imageReady: 'Ảnh chụp màn hình đã sẵn sàng — nhấn Kiểm tra để phân tích',
@@ -92,22 +98,22 @@ const SCENARIO_CHIPS: Array<{
   sample: string;
 }> = [
   {
-    id: 'social_ad',
+    id: 'line_forward',
+    icon: '💬',
+    label: { en: 'LINE Forward', 'zh-TW': 'LINE 轉傳', vi: 'Chuyển tiếp LINE' },
+    sample: '朋友剛在 LINE 傳這個給我，說蝦皮訂單異常要我立刻更新資料：https://bit.ly/verify-shopee-tw',
+  },
+  {
+    id: 'facebook_ad',
     icon: '📢',
-    label: { en: 'Social Media Ad', 'zh-TW': '社群廣告', vi: 'Quảng cáo mạng xã hội' },
-    sample: 'https://bit.ly/3invest-now-crypto',
+    label: { en: 'Facebook Ad', 'zh-TW': 'Facebook 廣告', vi: 'Quảng cáo Facebook' },
+    sample: 'https://bit.ly/tw-sale-event',
   },
   {
-    id: 'celeb_invest',
-    icon: '💰',
-    label: { en: 'Fake Celebrity Investment', 'zh-TW': '假名人投資', vi: 'Đầu tư giả người nổi tiếng' },
-    sample: '馬斯克推薦：每月保證30%報酬！立即點擊加入 https://elon-crypto-tw.com',
-  },
-  {
-    id: 'customer_service',
-    icon: '📞',
-    label: { en: 'Fake Customer Service', 'zh-TW': '客服詐騙', vi: 'Giả nhân viên hỗ trợ' },
-    sample: '您好，我是台灣銀行客服，您的帳戶出現異常交易，請立即撥打 02-1234-5678 處理',
+    id: 'instagram_account',
+    icon: '📸',
+    label: { en: 'Instagram Account', 'zh-TW': 'Instagram 帳號', vi: 'Tài khoản Instagram' },
+    sample: '@brand.tw_service',
   },
   {
     id: 'phishing_sms',
@@ -116,28 +122,34 @@ const SCENARIO_CHIPS: Array<{
     sample: '您的包裹無法投遞，請點擊更新地址：https://post-tw-delivery.net/verify',
   },
   {
-    id: 'fake_giveaway',
-    icon: '🎁',
-    label: { en: 'Fake Giveaway', 'zh-TW': '假抽獎/假活動', vi: 'Quà tặng/sự kiện giả' },
-    sample: '恭喜您中獎！請點擊領取 iPhone 15：https://apple-lucky-tw.com/prize',
+    id: 'short_link',
+    icon: '🔗',
+    label: { en: 'Short Link', 'zh-TW': '短網址', vi: 'Liên kết rút gọn' },
+    sample: 'https://reurl.cc/4g5Yx2',
   },
 ];
 
 const detectInputType = (value: string): InputMode => {
   const trimmed = value.trim();
   if (/^(https?:\/\/|www\.)/i.test(trimmed)) return 'URL';
+  if (/^\+?\d[\d\s\-()]{7,}$/.test(trimmed)) return 'PHONE';
+  if (/^@?[a-zA-Z0-9._]{2,50}$/.test(trimmed)) return 'HANDLE';
   return 'SMS_TEXT';
 };
 
 const getModeIcon = (mode: InputMode, className: string) => {
   switch (mode) {
     case 'URL':      return <Link className={className} />;
+    case 'PHONE':    return <Phone className={className} />;
+    case 'HANDLE':   return <AtSign className={className} />;
     case 'SMS_TEXT': return <MessageSquare className={className} />;
   }
 };
 
 const DETECTED_COLORS: Record<InputMode, string> = {
   URL:      'text-blue-400 border-blue-400/40 bg-blue-400/10',
+  PHONE:    'text-emerald-400 border-emerald-400/40 bg-emerald-400/10',
+  HANDLE:   'text-pink-400 border-pink-400/40 bg-pink-400/10',
   SMS_TEXT: 'text-purple-400 border-purple-400/40 bg-purple-400/10',
 };
 
@@ -443,12 +455,12 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
         <p className="text-center text-xs text-gray-600 mt-2">{t.pasteImage}</p>
       )}
 
-      {/* Detected Type Badge — only shown for URL (SMS_TEXT is default, no need to label) */}
-      {displayedType === 'URL' && input.trim() && (
+      {/* Detected Type Badge */}
+      {displayedType && displayedType !== 'SMS_TEXT' && input.trim() && (
         <div className="flex justify-center mt-3">
-          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-all ${DETECTED_COLORS['URL']}`}>
-            {getModeIcon('URL', 'w-3 h-3')}
-            {t.detectedLabel} {t.detected['URL']}
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium transition-all ${DETECTED_COLORS[displayedType]}`}>
+            {getModeIcon(displayedType, 'w-3 h-3')}
+            {t.detectedLabel} {t.detected[displayedType]}
           </span>
         </div>
       )}
