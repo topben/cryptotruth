@@ -461,22 +461,23 @@ const SearchInput: React.FC<SearchInputProps> = ({ onSearch, isLoading, language
 
       {/* Scenario Chips — only when input is empty and not senior mode */}
       {!input.trim() && !isSeniorMode && (
-        <>
-          <p className="text-center text-xs text-gray-500 mt-6 mb-3">{t.scenarioHint}</p>
+        <div className="mt-6">
+          <p className="text-center text-xs text-gray-500 mb-3">{t.scenarioHint}</p>
           <div className="flex flex-wrap justify-center gap-2">
             {SCENARIO_CHIPS.map(({ id, icon, label, sample }) => (
               <button
                 key={id}
                 onClick={() => setInput(sample)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800/80 hover:bg-gray-700 border border-gray-700 hover:border-crypto-accent/50 text-sm text-gray-300 hover:text-white transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800/80 hover:bg-gray-700 border border-gray-700 hover:border-crypto-accent/50 text-sm text-gray-300 hover:text-white active:scale-95 transition-all"
                 disabled={isLoading}
+                title={sample}
               >
                 <span>{icon}</span>
                 <span>{label[language as keyof typeof label] ?? label.en}</span>
               </button>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       {/* Senior Mode hint */}
