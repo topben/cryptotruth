@@ -19,7 +19,6 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour window
 const MAX_REQUESTS_PER_WINDOW = 10; // Max 10 API calls per IP per hour
 const MAX_INPUT_LENGTH = 2000; // Max length for URL or SMS text
 const ALLOWED_LANGUAGES = ['en', 'zh-TW', 'vi'];
-const ALLOWED_INPUT_TYPES = ['HANDLE', 'URL', 'SMS_TEXT', 'PHONE'];
 const ALLOWED_INPUT_TYPES = ['URL', 'SMS_TEXT', 'PHONE'];
 
 // Inflation Maps for minified schema
@@ -831,12 +830,6 @@ const normalizeInput = (input: string, inputType: string) => {
     return normalized;
   }
 
-  if (inputType === 'HANDLE') {
-    normalized.handle = input.replace(/^@/, '');
-    normalized.platform = guessPlatform(input) || 'Instagram';
-    return normalized;
-  }
-
   normalized.text = input;
   normalized.platform = guessPlatform(input);
   const urlMatch = input.match(/https?:\/\/[^\s<>"{}|\\^`[\]]+/i);
@@ -928,7 +921,7 @@ async function buildAgentVerification(normalizedInput: any, inputType: string): 
   const targetUrl = normalizedInput.url;
   if (!targetUrl) {
     return {
-      status: inputType === 'HANDLE' ? 'LIMITED' : 'NOT_RUN',
+      status: 'NOT_RUN',
       redirectChain: [],
       forms: [],
       ctaButtons: [],
@@ -954,7 +947,7 @@ async function buildAgentVerification(normalizedInput: any, inputType: string): 
     ].filter(Boolean);
 
     return {
-      status: inputType === 'HANDLE' ? 'OBSERVED_PROFILE' : 'OBSERVED_URL',
+      status: 'OBSERVED_URL',
       originalUrl: targetUrl,
       ...observed,
       screenshots: [],
