@@ -272,6 +272,7 @@ const App: React.FC = () => {
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
   const [loadingStep, setLoadingStep] = useState<1 | 2 | 3>(1);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [searchInputKey, setSearchInputKey] = useState(0);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -331,6 +332,7 @@ const App: React.FC = () => {
     setLoadingState('IDLE');
     setFeedbackGiven(null);
     setLoadingStep(1);
+    setSearchInputKey(k => k + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -546,6 +548,7 @@ const App: React.FC = () => {
           )}
 
           <SearchInput
+            key={searchInputKey}
             onSearch={handleSearch}
             isLoading={loadingState === 'SEARCHING' || loadingState === 'ANALYZING'}
             language={language}
