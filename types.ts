@@ -72,7 +72,7 @@ export type Language = 'en' | 'zh-TW' | 'vi';
 // ========== TruthGuard AI Types (Hackathon Modules) ==========
 
 // Input type for flexible analysis (Module A)
-export type InputType = 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE' | 'IMAGE';
+export type InputType = 'URL' | 'SMS_TEXT' | 'PHONE' | 'IMAGE';
 
 export type FinalVerdict =
   | 'A_MARKETING'

@@ -17,10 +17,10 @@ const maskPII = (text: string): string => {
 const CACHE_DURATION_MS = 72 * 60 * 60 * 1000; // 72 hours
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour window
 const MAX_REQUESTS_PER_WINDOW = 10; // Max 10 API calls per IP per hour
-const MAX_HANDLE_LENGTH = 50;
 const MAX_INPUT_LENGTH = 2000; // Max length for URL or SMS text
 const ALLOWED_LANGUAGES = ['en', 'zh-TW', 'vi'];
 const ALLOWED_INPUT_TYPES = ['HANDLE', 'URL', 'SMS_TEXT', 'PHONE'];
+const ALLOWED_INPUT_TYPES = ['URL', 'SMS_TEXT', 'PHONE'];
 
 // Inflation Maps for minified schema
 const HISTORY_TYPE_MAP: Record<number, string> = {
@@ -36,7 +36,7 @@ const ACTION_TYPE_MAP: Record<number, string> = { 0: "CALL_165", 1: "BLOCK", 2: 
 /**
  * Detect input type from content
  */
-const detectInputType = (input: string): 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE' => {
+const detectInputType = (input: string): 'URL' | 'SMS_TEXT' | 'PHONE' => {
   const trimmed = input.trim();
 
   // Check if it's a URL
@@ -49,12 +49,6 @@ const detectInputType = (input: string): 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE'
     return 'PHONE';
   }
 
-  // Check if it looks like a Twitter handle (alphanumeric + underscores, optionally with @)
-  const handlePattern = /^@?[a-zA-Z0-9_]{1,50}$/;
-  if (handlePattern.test(trimmed)) {
-    return 'HANDLE';
-  }
-
   // Otherwise, treat as SMS/text content
   return 'SMS_TEXT';
 };
@@ -62,19 +56,12 @@ const detectInputType = (input: string): 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE'
 /**
  * Sanitize and validate input based on type
  */
-const sanitizeInput = (input: string, inputType: 'HANDLE' | 'URL' | 'SMS_TEXT' | 'PHONE'): string | null => {
+const sanitizeInput = (input: string, inputType: 'URL' | 'SMS_TEXT' | 'PHONE'): string | null => {
   if (!input || typeof input !== 'string') return null;
 
   const trimmed = input.trim();
 
   switch (inputType) {
-    case 'HANDLE':
-      // Remove @ prefix and validate
-      let sanitized = trimmed.replace(/^@/, '');
-      if (sanitized.length === 0 || sanitized.length > MAX_HANDLE_LENGTH) return null;
-      if (!/^[a-zA-Z0-9_]+$/.test(sanitized)) return null;
-      return sanitized.toLowerCase();
-
     case 'URL':
       // Basic URL validation
       if (trimmed.length > MAX_INPUT_LENGTH) return null;
@@ -127,8 +114,23 @@ const generateCacheKey = (input: string, inputType: string): string => {
   if (inputType === 'PHONE') {
     return `phone-${input.replace(/\+/g, '')}`;
   }
-  // For handles, use the handle directly
-  return input.toLowerCase();
+  return input;
+};
+
+const logToGoogleSheets = async (webhookUrl: string, payload: string) => {
+  try {
+    const r1 = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      redirect: 'manual',
+    });
+    const redirectUrl = r1.headers.get('location');
+    if (!redirectUrl) return;
+    await fetch(redirectUrl, { method: 'GET' });
+  } catch {
+    // Fire-and-forget logging must never break the main API response.
+  }
 };
 
 /**
@@ -1121,13 +1123,13 @@ export default async function handler(req: any, res: any) {
   const isBotRequest = botApiKey && requestBotKey === botApiKey;
 
   try {
-    const { handle: rawHandle, input: rawInput, inputType: rawInputType, language: rawLanguage, forceRefresh } = req.body;
+    const { input: rawInput, inputType: rawInputType, language: rawLanguage, forceRefresh } = req.body;
 
-    // === INPUT VALIDATION (Support both legacy 'handle' and new 'input' field) ===
-    const inputContent = rawInput || rawHandle;
+    // === INPUT VALIDATION ===
+    const inputContent = rawInput;
     if (!inputContent) {
       return res.status(400).json({
-        error: 'Missing input. Please provide a Twitter handle, URL, or SMS text.'
+        error: 'Missing input. Please provide a URL, phone number, or message.'
       });
     }
 
@@ -1140,18 +1142,13 @@ export default async function handler(req: any, res: any) {
     const sanitizedInput = sanitizeInput(inputContent, detectedType);
     if (!sanitizedInput) {
       return res.status(400).json({
-        error: detectedType === 'HANDLE'
-          ? 'Invalid handle format. Use alphanumeric characters and underscores only (max 50 chars).'
-          : detectedType === 'URL'
+        error: detectedType === 'URL'
           ? 'Invalid URL format. Please provide a valid URL.'
           : detectedType === 'PHONE'
           ? 'Invalid phone number. Use E.164 format (e.g. +886912345678) or Taiwan local format (0912345678).'
           : 'Invalid input. Text must be between 1 and 2000 characters.'
       });
     }
-
-    // For backward compatibility, set handle for HANDLE type
-    const handle = detectedType === 'HANDLE' ? sanitizedInput : '';
 
     // Validate language
     const language = ALLOWED_LANGUAGES.includes(rawLanguage) ? rawLanguage : 'en';
@@ -1207,7 +1204,7 @@ export default async function handler(req: any, res: any) {
 
         return res.status(200).json({
           ...normalizedCache,
-          handle: handle || normalizedCache.handle || '',
+          handle: normalizedCache.handle || '',
           source: 'cache',
           cachedAt: cached.cachedAt
         });
@@ -1272,38 +1269,7 @@ IMPORTANT — CALIBRATION RULES:
 - If search results show nothing concerning, set scamProbability ≤ 20 and trustScore ≥ 75.
 `;
 
-      if (detectedType === 'HANDLE') {
-        return `
-TASK: Crypto Influencer Background Check — objective research, report what you find.
-ANALYSIS TARGET: Twitter/X Handle "@${sanitizedInput}"
-LANGUAGE: ${langInstruction}
-
-INSTRUCTIONS:
-1. Use Google Search to research this account's history, reputation, and track record.
-2. Search for: "${sanitizedInput} crypto", "${sanitizedInput} scam", "${sanitizedInput} rug pull", "ZachXBT ${sanitizedInput}", "Coffeezilla ${sanitizedInput}".
-3. If search returns nothing suspicious, treat the account as unverified but not high-risk.
-${scamDetectionInstructions}
-
-SCORING:
-- trustScore: 0(Scam)-100(Trusted). <20: Confirmed Fraud. 20-40: High Risk. 40-60: Unverified/Caution. 60-80: Likely Legitimate. >80: Well-established, Trusted.
-- scamProbability: Only elevate above 40 if concrete negative evidence is found. No evidence = 10-30.
-
-OUTPUT JSON ONLY:
-{
-  "d": "Display Name",
-  "b": "Short Bio (max 15 words)",
-  "s": 0-3 (0=Unknown, 1=Verified Influencer, 2=Impersonator, 3=Official Project),
-  "ts": Trust Score (0-100),
-  "sp": Scam Probability (0-100),
-  "v": "One sentence verdict",
-  "eq": 0-3 (0=Organic, 1=Mixed, 2=Suspicious, 3=BotHeavy),
-  "c": ["Credibility Strengths array"],
-  "r": ["Risk Factors array"],
-  "rs": [{"t": "Signal Type", "e": "Evidence description", "l": 0-2 (0=CRITICAL, 1=WARNING, 2=INFO)}],
-  "h": [{"dt": "YYYY-MM-DD", "e": "Event Title", "t": 0-5 (0=Win,1=Loss,2=Controversy,3=News,4=Scam,5=Investigation), "tk": "Token symbol or null", "s": 0-2 (0=Positive,1=Negative,2=Neutral), "x": "Details"}]
-}
-`;
-      } else if (detectedType === 'URL') {
+      if (detectedType === 'URL') {
         return `
 TASK: URL Safety Check — objective research, report what you find.
 ANALYSIS TARGET: URL "${sanitizedInput}"
@@ -1478,8 +1444,8 @@ OUTPUT JSON ONLY:
 
     const fullData: any = {
       // Legacy handle field for backward compatibility
-      handle: handle || sanitizedInput,
-      displayName: minData.d || handle || sanitizedInput,
+      handle: '',
+      displayName: minData.d || sanitizedInput,
       bioSummary: minData.b || "No bio available",
       identityStatus: IDENTITY_MAP[minData.s] || "UNKNOWN_ENTITY",
       trustScore: minData.ts ?? 50,
@@ -1577,7 +1543,7 @@ OUTPUT JSON ONLY:
       fullData.suggestedActions = generateActions(50, fullData.riskSignals, language);
       fullData.seniorModeVerdict = generateSeniorVerdict(50, language);
 
-      const displayIdentifier = fullData.displayName || handle || sanitizedInput;
+      const displayIdentifier = fullData.displayName || sanitizedInput;
 
       // If model didn't give a meaningful bio, provide a safe default
       if (!fullData.bioSummary || !fullData.bioSummary.trim() || fullData.bioSummary === "No bio available") {
@@ -1677,21 +1643,7 @@ OUTPUT JSON ONLY:
         verdict: fullData.verdict,
         riskSignals: fullData.riskSignals,
       });
-      (async () => {
-        try {
-          // Step 1: get redirect URL without following it
-          const r1 = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: sheetsPayload,
-            redirect: 'manual',
-          });
-          const redirectUrl = r1.headers.get('location');
-          if (!redirectUrl) return;
-          // Step 2: GET the echo URL to complete the Apps Script response cycle
-          await fetch(redirectUrl, { method: 'GET' });
-        } catch { /* silently ignore */ }
-      })();
+      void logToGoogleSheets(webhookUrl, sheetsPayload);
     }
 
     return res.status(200).json({

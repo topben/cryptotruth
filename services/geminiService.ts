@@ -1,4 +1,4 @@
-import { KOLAnalysis, TruthGuardAnalysis, Language, InputType } from "../types";
+import { TruthGuardAnalysis, Language, InputType } from "../types";
 
 export class APIError extends Error {
   statusCode: number;
@@ -10,38 +10,7 @@ export class APIError extends Error {
 }
 
 /**
- * Legacy function for backward compatibility
- */
-export const analyzeKOLHandle = async (
-  handle: string,
-  language: Language = 'en',
-  forceRefresh: boolean = false
-): Promise<KOLAnalysis> => {
-  const response = await fetch('/api/analyze', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ handle, language, forceRefresh }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.error || `HTTP error! status: ${response.status}`;
-
-    if (response.status === 429) throw new APIError("Rate limit exceeded", 429);
-    if (response.status === 404) throw new APIError("Not found", 404);
-    if (response.status === 400) throw new APIError("Bad request", 400);
-
-    throw new APIError(message, response.status);
-  }
-
-  const data = await response.json();
-  return data as KOLAnalysis;
-};
-
-/**
- * New TruthGuard analysis function supporting multiple input types
+ * TruthGuard analysis function supporting multiple input types
  */
 export const analyzeTruthGuard = async (
   input: string,
@@ -78,7 +47,7 @@ export const analyzeTruthGuard = async (
   // Ensure TruthGuard-specific fields have defaults
   return {
     ...data,
-    inputType: data.inputType || 'HANDLE',
+    inputType: data.inputType || inputType || 'SMS_TEXT',
     originalInput: data.originalInput || input,
     riskSignals: data.riskSignals || [],
     suggestedActions: data.suggestedActions || [],
