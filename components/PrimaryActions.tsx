@@ -6,6 +6,7 @@ interface PrimaryActionsProps {
   actions: PrimaryAction[];
   officialRoute: OfficialRouteResolution;
   language?: Language;
+  onReport?: () => void;
 }
 
 const LABELS = {
@@ -23,7 +24,7 @@ const LABELS = {
   },
 };
 
-const PrimaryActions: React.FC<PrimaryActionsProps> = ({ actions, officialRoute, language = 'zh-TW' }) => {
+const PrimaryActions: React.FC<PrimaryActionsProps> = ({ actions, officialRoute, language = 'zh-TW', onReport }) => {
   const t = LABELS[language];
   const officialAction = actions.find((item) => item.kind === 'OFFICIAL_ROUTE') ?? {
     label: t.official,
@@ -36,7 +37,7 @@ const PrimaryActions: React.FC<PrimaryActionsProps> = ({ actions, officialRoute,
     label: t.report,
     kind: 'REPORT',
     emphasis: 'secondary',
-    actionUrl: 'https://165.npa.gov.tw/',
+    actionUrl: 'https://165.npa.gov.tw/#/report/call/02',
     description: '',
   };
 
@@ -53,7 +54,7 @@ const PrimaryActions: React.FC<PrimaryActionsProps> = ({ actions, officialRoute,
   return (
     <section className="mb-5 grid gap-3 md:grid-cols-2">
       {[officialAction, reportAction].map((action) => {
-        const isDisabled = action.emphasis === 'disabled' || !action.actionUrl;
+        const isDisabled = action.emphasis === 'disabled' || (!action.actionUrl && action.kind !== 'REPORT');
         const icon = action.kind === 'REPORT'
           ? <Flag className="w-5 h-5" />
           : <ShieldCheck className="w-5 h-5" />;
@@ -68,6 +69,15 @@ const PrimaryActions: React.FC<PrimaryActionsProps> = ({ actions, officialRoute,
             <p className="text-sm opacity-80">{action.description}</p>
           </div>
         );
+
+        // REPORT: use the modal callback when provided
+        if (action.kind === 'REPORT' && onReport) {
+          return (
+            <button key={action.kind} onClick={onReport} className="text-left w-full">
+              {content}
+            </button>
+          );
+        }
 
         if (isDisabled) {
           return <div key={action.kind}>{content}</div>;

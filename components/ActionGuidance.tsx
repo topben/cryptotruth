@@ -7,6 +7,7 @@ interface ActionGuidanceProps {
   scamProbability: number;
   language?: Language;
   isSeniorMode?: boolean;
+  onReport?: () => void;
 }
 
 const TRANSLATIONS = {
@@ -44,6 +45,7 @@ const ActionGuidance: React.FC<ActionGuidanceProps> = ({
   scamProbability,
   language = 'en',
   isSeniorMode = false,
+  onReport,
 }) => {
   const t = TRANSLATIONS[language as keyof typeof TRANSLATIONS] ?? TRANSLATIONS.en;
 
@@ -94,9 +96,12 @@ const ActionGuidance: React.FC<ActionGuidanceProps> = ({
 
   // Handle action click
   const handleActionClick = (action: ActionPlan) => {
+    if (action.type === 'REPORT' && onReport) {
+      onReport();
+      return;
+    }
     if (action.actionUrl) {
       if (action.type === 'CALL_165') {
-        // For phone calls, use tel: protocol
         window.location.href = action.actionUrl;
       } else {
         window.open(action.actionUrl, '_blank', 'noopener,noreferrer');

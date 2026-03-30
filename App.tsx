@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Analytics } from '@vercel/analytics/react';
 import { TruthGuardAnalysis, LoadingState, Language, InputType } from './types';
 import { analyzeTruthGuard, APIError } from './services/geminiService';
@@ -17,7 +17,8 @@ import EvidencePack from './components/EvidencePack';
 import VerdictSummary from './components/VerdictSummary';
 import PrimaryActions from './components/PrimaryActions';
 import AgentFindings from './components/AgentFindings';
-import { ShieldAlert, Search, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, Eye, ChevronDown } from 'lucide-react';
+import ReportModal from './components/ReportModal';
+import { ShieldAlert, Search, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, ChevronDown, ThumbsUp, ThumbsDown, RotateCcw, ArrowLeft } from 'lucide-react';
 
 // UI Text dictionary for all static text
 const UI_TEXT = {
@@ -268,7 +269,11 @@ const App: React.FC = () => {
   const [loadingMessageIndex, setLoadingMessageIndex] = useState<number>(0);
   const [isSeniorMode, setIsSeniorMode] = useState<boolean>(false);
   const [langMenuOpen, setLangMenuOpen] = useState<boolean>(false);
+  const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
+  const [loadingStep, setLoadingStep] = useState<1 | 2 | 3>(1);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
   const langMenuRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -296,13 +301,44 @@ const App: React.FC = () => {
     }
   }, [loadingState, loadingMessages.length, isSeniorMode]);
 
+  // Auto-scroll to results when analysis completes
+  useEffect(() => {
+    if (loadingState === 'COMPLETED' && resultsRef.current) {
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [loadingState]);
+
+  // Loading step progression: step 1 → SEARCHING, step 2 → ANALYZING (1.5s), step 3 → ~8s into ANALYZING
+  useEffect(() => {
+    if (loadingState === 'SEARCHING') {
+      setLoadingStep(1);
+    } else if (loadingState === 'ANALYZING') {
+      setLoadingStep(2);
+      const t3 = setTimeout(() => setLoadingStep(3), 8000);
+      return () => clearTimeout(t3);
+    }
+  }, [loadingState]);
+
   const toggleSeniorMode = () => {
     setIsSeniorMode(prev => !prev);
   };
 
+  const handleReset = useCallback(() => {
+    setAnalysis(null);
+    setError(null);
+    setLoadingState('IDLE');
+    setFeedbackGiven(null);
+    setLoadingStep(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
   const handleSearch = async (input: string, inputType?: InputType, imageData?: { base64: string; mediaType: string }) => {
     setError(null);
     setAnalysis(null);
+    setFeedbackGiven(null);
+    setLoadingStep(1);
     setLoadingState('SEARCHING');
     setLoadingMessageIndex(0);
 
@@ -517,45 +553,125 @@ const App: React.FC = () => {
           />
         </div>
 
-        {/* Loading State Overlay */}
-        {(loadingState === 'SEARCHING' || loadingState === 'ANALYZING') && (
-            <div className={`flex flex-col items-center justify-center ${isSeniorMode ? 'mt-16' : 'mt-20'}`}>
-                <div className={`border-4 border-crypto-accent border-t-transparent rounded-full animate-spin mb-4 ${
-                  isSeniorMode ? 'w-24 h-24' : 'w-16 h-16'
-                }`}></div>
-                <p className={`font-display text-crypto-accent animate-pulse ${isSeniorMode ? 'text-3xl' : 'text-xl'}`}>
-                    {loadingMessages[loadingMessageIndex]}
-                </p>
-                <p className={`text-gray-500 mt-2 ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>
-                  {isSeniorMode ? t.loading.waitSenior : t.loading.wait}
-                </p>
+        {/* Loading State — 3-step progress indicator */}
+        {(loadingState === 'SEARCHING' || loadingState === 'ANALYZING') && (() => {
+          const steps = language === 'zh-TW'
+            ? ['掃描網域與資料庫', 'AI 分析中', '產生報告']
+            : language === 'vi'
+            ? ['Quét tên miền', 'Phân tích AI', 'Tạo báo cáo']
+            : ['Scanning domain & databases', 'AI analysis', 'Building report'];
+          return (
+            <div className={`flex flex-col items-center justify-center ${isSeniorMode ? 'mt-16' : 'mt-16'}`}>
+              {/* Spinner */}
+              <div className={`border-4 border-crypto-accent border-t-transparent rounded-full animate-spin mb-6 ${
+                isSeniorMode ? 'w-16 h-16' : 'w-12 h-12'
+              }`} />
+              {/* Step indicators */}
+              <div className="flex items-center gap-2 mb-5">
+                {steps.map((label, i) => {
+                  const stepNum = (i + 1) as 1 | 2 | 3;
+                  const isActive = loadingStep === stepNum;
+                  const isDone = loadingStep > stepNum;
+                  return (
+                    <React.Fragment key={label}>
+                      <div className="flex flex-col items-center gap-1">
+                        <div className={`rounded-full flex items-center justify-center font-bold transition-all duration-500 ${
+                          isSeniorMode ? 'w-10 h-10 text-base' : 'w-7 h-7 text-xs'
+                        } ${
+                          isDone
+                            ? 'bg-crypto-accent text-crypto-dark'
+                            : isActive
+                            ? 'bg-crypto-accent/20 border-2 border-crypto-accent text-crypto-accent animate-pulse'
+                            : 'bg-gray-800 border border-gray-700 text-gray-600'
+                        }`}>
+                          {isDone ? '✓' : stepNum}
+                        </div>
+                        <span className={`transition-colors duration-300 ${
+                          isSeniorMode ? 'text-sm' : 'text-xs'
+                        } ${
+                          isDone || isActive ? 'text-gray-300' : 'text-gray-600'
+                        }`}>{label}</span>
+                      </div>
+                      {i < steps.length - 1 && (
+                        <div className={`h-px w-8 transition-colors duration-500 ${
+                          loadingStep > stepNum ? 'bg-crypto-accent' : 'bg-gray-700'
+                        }`} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+              {/* Current message */}
+              <p className={`font-display text-crypto-accent animate-pulse text-center ${isSeniorMode ? 'text-2xl' : 'text-lg'}`}>
+                {loadingMessages[loadingMessageIndex]}
+              </p>
+              <p className={`text-gray-600 mt-1 ${isSeniorMode ? 'text-base' : 'text-xs'}`}>
+                {isSeniorMode ? t.loading.waitSenior : t.loading.wait}
+              </p>
             </div>
-        )}
+          );
+        })()}
 
         {/* Error State */}
         {loadingState === 'ERROR' && (
-             <div className={`max-w-2xl mx-auto mt-10 bg-red-900/20 border border-red-900 rounded-lg text-center ${
-               isSeniorMode ? 'p-8' : 'p-6'
-             }`}>
-                <ShieldAlert className={`text-red-500 mx-auto mb-4 ${isSeniorMode ? 'w-16 h-16' : 'w-12 h-12'}`} />
-                <h3 className={`font-bold text-red-400 mb-2 ${isSeniorMode ? 'text-2xl' : 'text-xl'}`}>
-                  {isSeniorMode ? t.error.titleSenior : t.error.title}
-                </h3>
-                <p className={`text-gray-400 ${isSeniorMode ? 'text-xl' : ''}`}>{error}</p>
-                {isSeniorMode && language === 'zh-TW' && (
-                  <a
-                    href="tel:165"
-                    className="inline-flex items-center gap-2 mt-6 px-8 py-4 bg-red-600 hover:bg-red-500 text-white text-xl font-bold rounded-xl"
-                  >
-                    📞 {t.inline.call165Btn}
-                  </a>
-                )}
-             </div>
+          <div className={`max-w-2xl mx-auto mt-10 bg-red-900/20 border border-red-900 rounded-xl text-center ${
+            isSeniorMode ? 'p-8' : 'p-6'
+          }`}>
+            <ShieldAlert className={`text-red-500 mx-auto mb-4 ${isSeniorMode ? 'w-16 h-16' : 'w-12 h-12'}`} />
+            <h3 className={`font-bold text-red-400 mb-2 ${isSeniorMode ? 'text-2xl' : 'text-xl'}`}>
+              {isSeniorMode ? t.error.titleSenior : t.error.title}
+            </h3>
+            <p className={`text-gray-400 ${isSeniorMode ? 'text-xl' : ''}`}>{error}</p>
+            <div className={`flex flex-col sm:flex-row items-center justify-center gap-3 ${isSeniorMode ? 'mt-8' : 'mt-5'}`}>
+              <button
+                onClick={handleReset}
+                className={`inline-flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-200 font-semibold rounded-xl transition-colors ${
+                  isSeniorMode ? 'px-8 py-4 text-xl' : 'px-5 py-2.5 text-sm'
+                }`}
+              >
+                <RotateCcw className={isSeniorMode ? 'w-6 h-6' : 'w-4 h-4'} />
+                {language === 'zh-TW' ? '重新嘗試' : language === 'vi' ? 'Thử lại' : 'Try Again'}
+              </button>
+              {language === 'zh-TW' && (
+                <a
+                  href="tel:165"
+                  className={`inline-flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors ${
+                    isSeniorMode ? 'px-8 py-4 text-xl' : 'px-5 py-2.5 text-sm'
+                  }`}
+                >
+                  📞 {t.inline.call165Btn}
+                </a>
+              )}
+            </div>
+          </div>
         )}
 
         {/* Results View */}
         {analysis && loadingState === 'COMPLETED' && (
-          <div className="animate-fade-in-up max-w-3xl mx-auto">
+          <div ref={resultsRef} className="animate-fade-in-up max-w-3xl mx-auto">
+
+            {/* Check Another — top of results, all screen sizes */}
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={handleReset}
+                className={`inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors group ${
+                  isSeniorMode ? 'text-lg' : 'text-sm'
+                }`}
+              >
+                <ArrowLeft className={`transition-transform group-hover:-translate-x-0.5 ${isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'}`} />
+                {language === 'zh-TW' ? '← 再查一次' : language === 'vi' ? '← Kiểm tra lại' : '← Check Another'}
+              </button>
+              {analysis.source === 'cache' ? (
+                <span className="text-xs text-blue-400 bg-blue-900/20 border border-blue-800 px-2 py-0.5 rounded">
+                  {t.results.cachedResult}
+                </span>
+              ) : (
+                <span className="text-xs text-green-400 bg-green-900/20 border border-green-800 px-2 py-0.5 rounded">
+                  {t.results.liveAnalysis}
+                </span>
+              )}
+            </div>
+
             <VerdictSummary
               conclusion={analysis.conclusion}
               verdict={analysis.finalVerdict}
@@ -566,6 +682,7 @@ const App: React.FC = () => {
               actions={analysis.primaryActions}
               officialRoute={analysis.officialRoute}
               language={language}
+              onReport={() => setReportModalOpen(true)}
             />
 
             <InterruptWarning
@@ -579,6 +696,7 @@ const App: React.FC = () => {
 
             <AgentFindings
               agent={analysis.agentVerification}
+              narrative={(analysis as any).agentNarrativeDescription}
               language={language}
             />
 
@@ -649,6 +767,7 @@ const App: React.FC = () => {
                 scamProbability={analysis.scamProbability}
                 language={language}
                 isSeniorMode={isSeniorMode}
+                onReport={() => setReportModalOpen(true)}
               />
             )}
 
@@ -658,24 +777,17 @@ const App: React.FC = () => {
                 {analysis.bioSummary && (
                   <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4">
                     <p className="text-gray-300 leading-relaxed text-sm">{analysis.bioSummary}</p>
-                    <div className="flex gap-2 mt-3 flex-wrap">
-                      {analysis.source === 'cache' && (
-                        <span className="text-xs text-blue-400 bg-blue-900/20 border border-blue-800 px-2 py-0.5 rounded">
-                          {t.results.cachedResult}
-                          {analysis.cachedAt && (() => {
-                            const ageMs = Date.now() - analysis.cachedAt;
-                            const ageMinutes = Math.round(ageMs / 1000 / 60);
-                            const timeDisplay = ageMinutes < 60 ? `${ageMinutes}m` : `${Math.round(ageMinutes / 60)}h`;
-                            return ' · ' + t.results.cachedAgo.replace('{time}', timeDisplay);
-                          })()}
-                        </span>
-                      )}
-                      {analysis.source === 'api' && (
-                        <span className="text-xs text-green-400 bg-green-900/20 border border-green-800 px-2 py-0.5 rounded">
-                          {t.results.liveAnalysis}
-                        </span>
-                      )}
+                    {analysis.source === 'cache' && analysis.cachedAt && (
+                    <div className="mt-3">
+                      <span className="text-xs text-blue-400 bg-blue-900/20 border border-blue-800 px-2 py-0.5 rounded">
+                        {t.results.cachedAgo.replace('{time}', (() => {
+                          const ageMs = Date.now() - analysis.cachedAt!;
+                          const ageMinutes = Math.round(ageMs / 1000 / 60);
+                          return ageMinutes < 60 ? `${ageMinutes}m` : `${Math.round(ageMinutes / 60)}h`;
+                        })())}
+                      </span>
                     </div>
+                  )}
                   </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -722,6 +834,39 @@ const App: React.FC = () => {
               </div>
             )}
 
+            {/* Feedback row */}
+            <div className={`mb-6 flex flex-col items-center gap-3 py-4 border-t border-gray-800 ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>
+              {feedbackGiven === null ? (
+                <>
+                  <p className="text-gray-500">
+                    {language === 'zh-TW' ? '這次分析對你有幫助嗎？' : language === 'vi' ? 'Phân tích này có hữu ích không?' : 'Was this analysis helpful?'}
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setFeedbackGiven('up')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-700 hover:border-green-500/60 hover:bg-green-900/20 hover:text-green-400 text-gray-400 transition-all ${isSeniorMode ? 'text-base px-6 py-3' : ''}`}
+                    >
+                      <ThumbsUp className={isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'} />
+                      {language === 'zh-TW' ? '有幫助' : language === 'vi' ? 'Có ích' : 'Helpful'}
+                    </button>
+                    <button
+                      onClick={() => setFeedbackGiven('down')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-700 hover:border-red-500/60 hover:bg-red-900/20 hover:text-red-400 text-gray-400 transition-all ${isSeniorMode ? 'text-base px-6 py-3' : ''}`}
+                    >
+                      <ThumbsDown className={isSeniorMode ? 'w-5 h-5' : 'w-4 h-4'} />
+                      {language === 'zh-TW' ? '需要改善' : language === 'vi' ? 'Cần cải thiện' : 'Needs work'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className={`text-gray-400 ${isSeniorMode ? 'text-lg' : 'text-sm'}`}>
+                  {feedbackGiven === 'up'
+                    ? (language === 'zh-TW' ? '✅ 謝謝你的回饋！' : language === 'vi' ? '✅ Cảm ơn phản hồi của bạn!' : '✅ Thanks for your feedback!')
+                    : (language === 'zh-TW' ? '✅ 收到，我們會持續改善。' : language === 'vi' ? '✅ Đã nhận, chúng tôi sẽ cải thiện.' : '✅ Noted, we\'ll keep improving.')}
+                </p>
+              )}
+            </div>
+
             {/* Gemini link */}
             <a
               href="https://gemini.google.com/"
@@ -740,16 +885,25 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Sticky Action (Mobile Only) usually, but kept generally for this layout */}
+      {/* Sticky "Check Another" — mobile fab */}
       {analysis && (
-          <div className="fixed bottom-6 right-6 z-40 md:hidden">
-            <button
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                className="bg-crypto-accent text-crypto-dark p-4 rounded-full shadow-lg font-bold flex items-center gap-2"
-            >
-                <Search size={20} /> {t.search.newSearch}
-            </button>
-          </div>
+        <div className="fixed bottom-6 right-6 z-40 md:hidden">
+          <button
+            onClick={handleReset}
+            className="bg-crypto-accent text-crypto-dark px-5 py-3 rounded-full shadow-lg font-bold flex items-center gap-2"
+          >
+            <Search size={18} /> {t.search.newSearch}
+          </button>
+        </div>
+      )}
+
+      {/* 165 Report Modal */}
+      {reportModalOpen && analysis && (
+        <ReportModal
+          analysis={analysis}
+          language={language}
+          onClose={() => setReportModalOpen(false)}
+        />
       )}
 
       {/* Footer: Free API Acknowledgments */}
