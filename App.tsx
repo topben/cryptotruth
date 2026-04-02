@@ -17,6 +17,7 @@ import EvidencePack from './components/EvidencePack';
 import VerdictSummary from './components/VerdictSummary';
 import PrimaryActions from './components/PrimaryActions';
 import AgentFindings from './components/AgentFindings';
+import CofactsFindings from './components/CofactsFindings';
 import ReportModal from './components/ReportModal';
 import { ShieldAlert, Search, Globe, CheckCircle2, AlertTriangle, Sparkles, ExternalLink, Accessibility, ChevronDown, ThumbsUp, ThumbsDown, RotateCcw, ArrowLeft } from 'lucide-react';
 
@@ -703,6 +704,13 @@ const App: React.FC = () => {
               language={language}
             />
 
+            {(analysis as any).cofactsResult && (
+              <CofactsFindings
+                cofacts={(analysis as any).cofactsResult}
+                language={language}
+              />
+            )}
+
             <LossRiskPanel
               scamProbability={analysis.scamProbability}
               likelyLosses={analysis.likelyLosses}
@@ -925,6 +933,16 @@ const App: React.FC = () => {
               <CheckCircle2 className="w-3 h-3 text-crypto-accent" />
               <span>VirusTotal</span>
             </span>
+            <span className="text-gray-700">·</span>
+            <a
+              href="https://cofacts.tw"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 hover:text-gray-300 transition-colors"
+            >
+              <CheckCircle2 className="w-3 h-3 text-crypto-accent" />
+              <span>Cofacts {language === 'zh-TW' ? '真的假的' : ''}</span>
+            </a>
           </div>
         </div>
       </footer>

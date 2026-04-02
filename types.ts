@@ -193,4 +193,29 @@ export interface TruthGuardAnalysis extends KOLAnalysis {
   officialRoute: OfficialRouteResolution;
   likelyLosses: LikelyLoss[];
   trustSummary: TrustTaggedValue[];
+
+  // Cofacts community fact-check
+  cofactsResult?: CofactsResult;
+}
+
+// Cofacts (cofacts.tw) community fact-check types
+export interface CofactsReply {
+  text: string;
+  type: 'RUMOR' | 'NOT_RUMOR' | 'OPINIONATED' | 'NOT_ARTICLE';
+  createdAt: string;
+}
+
+export interface CofactsArticle {
+  id: string;
+  text: string;
+  articleType: string;
+  replyCount: number;
+  createdAt: string;
+  replies: CofactsReply[];
+}
+
+export interface CofactsResult {
+  status: 'FOUND' | 'NOT_FOUND' | 'ERROR';
+  totalMatches: number;
+  articles: CofactsArticle[];
 }
