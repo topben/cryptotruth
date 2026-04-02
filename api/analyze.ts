@@ -402,6 +402,128 @@ const setCachedAnalysis = async (handle: string, language: string, data: any) =>
 
 
 // =============================================================================
+// COFACTS COMMUNITY FACT-CHECK — query cofacts.tw for crowd-sourced verification
+// =============================================================================
+
+interface CofactsArticle {
+  id: string;
+  text: string;
+  articleType: string;
+  replyCount: number;
+  createdAt: string;
+  replies: Array<{
+    text: string;
+    type: string; // RUMOR, NOT_RUMOR, OPINIONATED, NOT_ARTICLE
+    createdAt: string;
+  }>;
+}
+
+interface CofactsResult {
+  status: 'FOUND' | 'NOT_FOUND' | 'ERROR';
+  totalMatches: number;
+  articles: CofactsArticle[];
+}
+
+async function queryCofacts(inputText: string): Promise<CofactsResult> {
+  try {
+    // Take up to 100 chars for search to avoid overly specific queries
+    const searchText = inputText.slice(0, 100).trim();
+    if (searchText.length < 10) return { status: 'NOT_FOUND', totalMatches: 0, articles: [] };
+
+    const query = `{
+      ListArticles(
+        filter: { moreLikeThis: { like: ${JSON.stringify(searchText)}, minimumShouldMatch: "2<70%" } }
+        orderBy: [{ _score: DESC }]
+        first: 5
+      ) {
+        totalCount
+        edges {
+          node {
+            id
+            text
+            articleType
+            replyCount
+            createdAt
+            articleReplies {
+              reply {
+                text
+                type
+                createdAt
+              }
+            }
+          }
+        }
+      }
+    }`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const cofactsAppId = process.env.COFACTS_APP_ID || 'VERIFYFIRST_AI';
+    const resp = await fetch('https://api.cofacts.tw/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-app-id': cofactsAppId,
+      },
+      body: JSON.stringify({ query }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!resp.ok) return { status: 'ERROR', totalMatches: 0, articles: [] };
+
+    const json = await resp.json();
+    const list = json?.data?.ListArticles;
+    if (!list || list.totalCount === 0) return { status: 'NOT_FOUND', totalMatches: 0, articles: [] };
+
+    const articles: CofactsArticle[] = list.edges.map((edge: any) => ({
+      id: edge.node.id,
+      text: (edge.node.text || '').slice(0, 300),
+      articleType: edge.node.articleType,
+      replyCount: edge.node.replyCount || 0,
+      createdAt: edge.node.createdAt,
+      replies: (edge.node.articleReplies || [])
+        .filter((ar: any) => ar.reply)
+        .map((ar: any) => ({
+          text: (ar.reply.text || '').slice(0, 500),
+          type: ar.reply.type,
+          createdAt: ar.reply.createdAt,
+        })),
+    }));
+
+    return { status: 'FOUND', totalMatches: list.totalCount, articles };
+  } catch {
+    return { status: 'ERROR', totalMatches: 0, articles: [] };
+  }
+}
+
+function buildCofactsFactsSection(cofacts: CofactsResult): string {
+  if (cofacts.status !== 'FOUND' || cofacts.articles.length === 0) return '';
+
+  const lines: string[] = [
+    '\n=== COFACTS COMMUNITY FACT-CHECK (cofacts.tw — crowd-sourced verification) ===',
+    `Matched ${cofacts.totalMatches} similar report(s) in Cofacts database.`,
+  ];
+
+  const withReplies = cofacts.articles.filter(a => a.replyCount > 0);
+  for (const article of withReplies.slice(0, 3)) {
+    lines.push(`\n[Report] "${article.text.slice(0, 120)}${article.text.length > 120 ? '...' : ''}"`);
+    for (const reply of article.replies.slice(0, 2)) {
+      const typeLabel = reply.type === 'RUMOR' ? '❌ RUMOR (confirmed false)'
+        : reply.type === 'NOT_RUMOR' ? '✅ NOT A RUMOR (confirmed true)'
+        : reply.type === 'OPINIONATED' ? '💬 OPINIONATED (contains personal opinion)'
+        : '📝 NOT AN ARTICLE';
+      lines.push(`  Verdict: ${typeLabel}`);
+      lines.push(`  Reply: "${reply.text.slice(0, 200)}${reply.text.length > 200 ? '...' : ''}"`);
+    }
+  }
+
+  lines.push('=== END COFACTS ===');
+  return lines.join('\n');
+}
+
+// =============================================================================
 // FACT GATHERING — free external checks run before AI analysis
 // =============================================================================
 
@@ -1473,15 +1595,33 @@ export default async function handler(req: any, res: any) {
 
     // === GATHER OBJECTIVE FACTS (parallel, before AI call) ===
     let factsSection = '';
-    if (detectedType === 'URL') {
-      factsSection = await buildURLFactsSection(sanitizedInput);
-    } else if (detectedType === 'PHONE') {
-      factsSection = buildPhoneFactsSection(sanitizedInput);
-    } else if (detectedType === 'SMS_TEXT') {
-      factsSection = await buildSMSFactsSection(sanitizedInput);
-    }
+    const factsPromise = (async () => {
+      if (detectedType === 'URL') return buildURLFactsSection(sanitizedInput);
+      if (detectedType === 'PHONE') return buildPhoneFactsSection(sanitizedInput);
+      if (detectedType === 'SMS_TEXT') return buildSMSFactsSection(sanitizedInput);
+      return '';
+    })();
 
-    const agentVerification = await buildAgentVerification(normalizedInput, detectedType);
+    // Query Cofacts for SMS_TEXT (most relevant) and URL types
+    const cofactsPromise = (detectedType === 'SMS_TEXT' || detectedType === 'URL')
+      ? queryCofacts(sanitizedInput)
+      : Promise.resolve({ status: 'NOT_FOUND' as const, totalMatches: 0, articles: [] });
+
+    const agentPromise = buildAgentVerification(normalizedInput, detectedType);
+
+    // Run all pre-checks in parallel
+    const [factsResult, cofactsResult, agentVerification] = await Promise.all([
+      factsPromise,
+      cofactsPromise,
+      agentPromise,
+    ]);
+    factsSection = factsResult;
+
+    // Append Cofacts section to facts
+    const cofactsSection = buildCofactsFactsSection(cofactsResult);
+    if (cofactsSection) {
+      factsSection = factsSection + '\n' + cofactsSection;
+    }
 
     // === CALL GEMINI API ===
     const ai = new GoogleGenAI({ apiKey });
@@ -1752,6 +1892,9 @@ OUTPUT JSON ONLY:
       suggestedActions,
       seniorModeVerdict: generateSeniorVerdict(scamProbability, language),
       agentVerification,
+
+      // Cofacts community fact-check results
+      cofactsResult: cofactsResult.status === 'FOUND' ? cofactsResult : undefined,
 
       // UI flow compatibility fields
       searchQueries: searchQueries.length > 0 ? searchQueries : undefined,
