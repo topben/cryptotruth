@@ -2,6 +2,15 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, ExternalLink, Users } from 'lucide-react';
 import { CofactsResult, Language } from '../types';
 
+/** Truncate text to at most the first two sentences. */
+function truncateToSentences(text: string, maxSentences = 2): string {
+  // Split on sentence-ending punctuation (Chinese and English)
+  const sentenceEnd = /(?<=[。！？.!?])\s*/;
+  const sentences = text.split(sentenceEnd).filter(Boolean);
+  const truncated = sentences.slice(0, maxSentences).join('');
+  return truncated.length < text.length ? `${truncated}⋯⋯` : truncated;
+}
+
 interface CofactsFindingsProps {
   cofacts: CofactsResult;
   language?: Language;
@@ -20,7 +29,8 @@ const LABELS = {
     hideMore: '收合查核內容',
     reportedOn: '回報日期',
     viewOnCofacts: '在 Cofacts 上查看',
-    poweredBy: '查證資料取自「Cofacts 真的假的」社群協作查核，採 CC BY-SA 4.0 授權',
+    poweredBy: '以上資料取自「Cofacts 真的假的」訊息回報機器人與查證協作社群，採 CC BY-SA 4.0 授權提供。若欲補充資訊請訪問 Cofacts LINE bot',
+    lineBotUrl: 'https://line.me/ti/p/@cofacts',
   },
   en: {
     title: 'Community Fact-Check',
@@ -34,7 +44,8 @@ const LABELS = {
     hideMore: 'Hide fact-check details',
     reportedOn: 'Reported on',
     viewOnCofacts: 'View on Cofacts',
-    poweredBy: 'Data from Cofacts crowd-sourced fact-checking, licensed under CC BY-SA 4.0',
+    poweredBy: 'Data from Cofacts crowd-sourced fact-checking community and LINE bot, licensed under CC BY-SA 4.0. To contribute, visit Cofacts LINE bot',
+    lineBotUrl: 'https://line.me/ti/p/@cofacts',
   },
   vi: {
     title: 'Kiểm tra sự thật cộng đồng',
@@ -48,7 +59,8 @@ const LABELS = {
     hideMore: 'Ẩn chi tiết',
     reportedOn: 'Ngày báo cáo',
     viewOnCofacts: 'Xem trên Cofacts',
-    poweredBy: 'Dữ liệu từ cộng đồng Cofacts, giấy phép CC BY-SA 4.0',
+    poweredBy: 'Dữ liệu từ cộng đồng Cofacts và LINE bot, giấy phép CC BY-SA 4.0. Để đóng góp, hãy truy cập Cofacts LINE bot',
+    lineBotUrl: 'https://line.me/ti/p/@cofacts',
   },
 };
 
@@ -99,24 +111,23 @@ const CofactsFindings: React.FC<CofactsFindingsProps> = ({ cofacts, language = '
         </div>
       )}
 
-      {/* Primary reply summary */}
+      {/* Primary reply summary — entire block links to Cofacts */}
       {primaryReply && (
-        <div className="rounded-2xl border border-gray-700 bg-gray-950/60 p-4 text-sm text-gray-200 leading-relaxed mb-3">
-          {primaryReply.text.slice(0, 300)}
-          {primaryReply.text.length > 300 ? '...' : ''}
-        </div>
+        <a
+          href={`https://cofacts.tw/article/${primaryArticle.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block rounded-2xl border border-gray-700 bg-gray-950/60 p-4 mb-3 hover:border-indigo-500/50 hover:bg-gray-950/80 transition-colors cursor-pointer group"
+        >
+          <p className="text-sm text-gray-200 leading-relaxed">
+            {truncateToSentences(primaryReply.text)}
+          </p>
+          <span className="inline-flex items-center gap-1.5 text-xs text-indigo-400 group-hover:text-indigo-300 mt-2">
+            <ExternalLink className="w-3 h-3" />
+            {t.viewOnCofacts}
+          </span>
+        </a>
       )}
-
-      {/* View on Cofacts link */}
-      <a
-        href={`https://cofacts.tw/article/${primaryArticle.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors mb-3"
-      >
-        <ExternalLink className="w-3 h-3" />
-        {t.viewOnCofacts}
-      </a>
 
       {/* Expandable: more articles */}
       {articlesWithReplies.length > 1 && (
@@ -132,9 +143,15 @@ const CofactsFindings: React.FC<CofactsFindingsProps> = ({ cofacts, language = '
           {expanded && (
             <div className="mt-3 space-y-3">
               {articlesWithReplies.slice(1, 4).map(article => (
-                <div key={article.id} className="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
+                <a
+                  key={article.id}
+                  href={`https://cofacts.tw/article/${article.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-xl border border-gray-800 bg-gray-950/40 p-3 hover:border-indigo-500/50 hover:bg-gray-950/60 transition-colors cursor-pointer group"
+                >
                   <p className="text-xs text-gray-500 mb-2">
-                    {article.text.slice(0, 100)}{article.text.length > 100 ? '...' : ''}
+                    {truncateToSentences(article.text, 1)}
                   </p>
                   {article.replies.slice(0, 1).map((reply, i) => (
                     <div key={i} className="mt-1">
@@ -142,30 +159,34 @@ const CofactsFindings: React.FC<CofactsFindingsProps> = ({ cofacts, language = '
                         {getVerdictLabel(reply.type)}
                       </span>
                       <p className="text-xs text-gray-400 mt-1 leading-relaxed">
-                        {reply.text.slice(0, 200)}{reply.text.length > 200 ? '...' : ''}
+                        {truncateToSentences(reply.text)}
                       </p>
                     </div>
                   ))}
-                  <a
-                    href={`https://cofacts.tw/article/${article.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors mt-2"
-                  >
+                  <span className="inline-flex items-center gap-1 text-xs text-indigo-400 group-hover:text-indigo-300 mt-2">
                     <ExternalLink className="w-3 h-3" />
                     {t.viewOnCofacts}
-                  </a>
-                </div>
+                  </span>
+                </a>
               ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Attribution (CC BY-SA 4.0 required) */}
-      <p className="text-xs text-gray-600 mt-3">
+      {/* Attribution (CC BY-SA 4.0 required, with LINE bot link per Cofacts guidelines) */}
+      <p className="text-xs text-gray-600 mt-3 leading-relaxed">
         {t.poweredBy}
         {' '}
+        <a
+          href={t.lineBotUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline text-indigo-500/70 hover:text-indigo-400"
+        >
+          @cofacts
+        </a>
+        {' · '}
         <a
           href="https://creativecommons.org/licenses/by-sa/4.0/"
           target="_blank"
